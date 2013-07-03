@@ -1,0 +1,24 @@
+{application, tq_db,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, {tq_db_app, []}},
+  {env, [
+    {pools,
+	 [{pool1,
+	   tq_postgres_driver, 
+	   [{size, 10}, 
+		{max_overflow, 20}],
+	   [{hostname,"m.medianika.com"},
+		{username,"postgres"},
+		{password,"FOt0I1oDON4G"},
+		{database,"medianika"}
+	   ]
+	  }]}
+  ]}
+ ]}.
