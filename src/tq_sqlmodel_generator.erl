@@ -20,14 +20,33 @@
 -export([meta_clauses/1]).
 
 meta_clauses(#model{table=Table, fields=Fields}) ->
-	DbTableClause = ?clause([?atom(db_table)], none,
+	TableClause = ?clause([?atom(table)], none,
 							[?abstract(Table)]),
 	DbAliasClause = [?clause([?tuple([?atom(db_alias), ?var('F')])], none,
 							 [?cases(?var('F'), [?clause([?atom(F#field.name)], none,
 														 [?abstract(F#field.alias)])
-									  || F <- Fields, F#field.type =/= undefined])])],
+												 || F <- Fields])])],
 	DbTypesClause = [?clause([?tuple([?atom(db_type), ?var('F')])], none,
 							 [?cases(?var('F'), [?clause([?atom(F#field.name)], none,
 														 [?abstract(F#field.type)])
-									  || F <- Fields, F#field.type =/= undefined])])],
-	lists:flatten([DbTableClause, DbTypesClause, DbAliasClause]).
+												 || F <- Fields])])],
+	DbRFieldsClaues = ?clause([?abstract({db_fields, r})], none,
+							 [?list([?string(atom_to_quated_string(F#field.name))
+									 || F <- Fields, F#field.mode#access_mode.sr])]),
+	DbWFieldsClaues = ?clause([?abstract({db_fields, w})], none,
+							  [?list([?string(atom_to_quated_string(F#field.name))
+									  || F <- Fields, F#field.mode#access_mode.sw])]),
+	[$, | SqlRFields] = lists:flatten([ [",", atom_to_quated_string(F#field.name)]
+										|| F <- Fields, F#field.mode#access_mode.sr]),
+	RSqlFieldsClause = ?clause([?abstract({sql, {db_fields, r}})], none,
+							   [?string(SqlRFields)]),
+
+	lists:flatten([TableClause,
+				   DbTypesClause,
+				   DbAliasClause,
+				   DbRFieldsClaues,
+				   DbWFieldsClaues,
+				   RSqlFieldsClause]).
+
+atom_to_quated_string(Atom) ->
+	lists:flatten("\""++atom_to_list(Atom)++"\"").

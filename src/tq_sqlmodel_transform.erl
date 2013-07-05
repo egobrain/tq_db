@@ -63,6 +63,9 @@ field_option(db_type, Type, Field) ->
 field_option(db_alias, Alias, Field) ->
 	Field2 = Field#field{alias = Alias},
 	{ok, Field2};
+field_option(mode, Mode, Field) ->
+	Field2 = Field#field{mode = mode_to_acl(Mode)},
+	{ok, Field2};
 field_option(_Option, _Val, _Field) ->
 	false.
 
@@ -79,26 +82,24 @@ set_field(Field, #model{fields=Fields} = Model) ->
 %% Meta.
 
 meta_clauses(#model{stores_in_db=true} = Model) ->
-	tq_db_generator:meta_clauses(Model);
+	tq_sqlmodel_generator:meta_clauses(Model);
 meta_clauses(_) -> [].
 
 
 %% Model rules.
 
 stores_in_db_rule(#model{table=Table, fields=Fields}=Model) ->
-	DbFields = lists:filter(fun(#field{type=undefined}) -> false;
-							   (_) -> true
-							end, Fields),
+	DbFields = lists:reverse([F || F <- Fields, F#field.type =/= undefined]),
 	case {DbFields =/= [], Table =/= undefined} of
 		{true, true} ->
-			Model2 = Model#model{stores_in_db = true},
+			Model2 = Model#model{fields=DbFields, stores_in_db=true},
 			{ok, Model2};
 		{false, true} ->
 			{error, "No db fields defined"};
 		{true, false} ->
 			{error, "Table name required"};
 		{false, false} ->
-			Model2 = Model#model{stores_in_db = false},
+			Model2 = Model#model{fields=[], stores_in_db = false},
 			{ok, Model2}
 	end.
 
@@ -134,6 +135,15 @@ alias_quoted_rule(#field{alias=Alias}=Field) ->
 
 %% Internal functions.
 
+mode_to_acl(r)    -> #access_mode{r=true,  sr=true,  w=false, sw=false};
+mode_to_acl(w)    -> #access_mode{r=false, sr=false, w=true,  sw=true};
+mode_to_acl(rw)   -> #access_mode{r=true,  sr=true,  w=true,  sw=true};
+mode_to_acl(sr)   -> #access_mode{r=false, sr=true,  w=false, sw=false};
+mode_to_acl(sw)   -> #access_mode{r=false, sr=false, w=false, sw=true};
+mode_to_acl(srsw) -> #access_mode{r=false, sr=true,  w=false, sw=true};
+mode_to_acl(rsw)  -> #access_mode{r=true,  sr=true,  w=false, sw=true};
+mode_to_acl(srw)  -> #access_mode{r=false, sr=true,  w=true,  sw=true}.
+
 quote(A) ->
 	<<"\"", A/binary, "\"">>.
 
@@ -146,7 +156,7 @@ is_quated(A) ->
 				{$", $"} ->
 					true;
 				_ ->
-					true
+					false
 			end;
 		false ->
 			false

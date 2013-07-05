@@ -1,3 +1,10 @@
+-record(access_mode,{
+		  r = true :: boolean(),
+		  sr = true :: boolean(),
+		  w = true :: boolean(),
+		  sw = true :: boolean()
+		 }).
+
 -record(model, {module,
 				fields = [],
 				table,
@@ -5,4 +12,6 @@
 
 -record(field, {name,
 				type,
-				alias}).
+				alias,
+				mode = #access_mode{}
+			   }).
