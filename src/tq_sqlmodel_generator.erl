@@ -31,12 +31,12 @@ meta_clauses(#model{table=Table, fields=Fields}) ->
 														 [?abstract(F#field.type)])
 												 || F <- Fields])])],
 	DbRFieldsClaues = ?clause([?abstract({db_fields, r})], none,
-							 [?list([?string(atom_to_quated_string(F#field.name))
+							 [?list([?atom(F#field.name)
 									 || F <- Fields, F#field.mode#access_mode.sr])]),
 	DbWFieldsClaues = ?clause([?abstract({db_fields, w})], none,
-							  [?list([?string(atom_to_quated_string(F#field.name))
+							  [?list([?atom(F#field.name)
 									  || F <- Fields, F#field.mode#access_mode.sw])]),
-	[$, | SqlRFields] = lists:flatten([ [",", atom_to_quated_string(F#field.name)]
+	[$, | SqlRFields] = lists:flatten([[$,, atom_to_quated_string(F#field.name)]
 										|| F <- Fields, F#field.mode#access_mode.sr]),
 	RSqlFieldsClause = ?clause([?abstract({sql, {db_fields, r}})], none,
 							   [?string(SqlRFields)]),
