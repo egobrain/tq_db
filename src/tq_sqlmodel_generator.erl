@@ -73,8 +73,30 @@ build_find(#model{find=true}) ->
 build_find(_Model) ->
 	{[], []}.
 
-build_delete(#model{delete=true}) ->
-	{[], []};
+build_delete(#model{delete=true, module=Module, fields=Fields}) ->
+	IndexFields = [F || F <- Fields, F#field.is_index =:= true],
+	Vars = ["Var" ++ integer_to_list(I) || I <- lists:seq(1, length(IndexFields))],
+	IndexFields2 = lists:zip(Vars, IndexFields),
+	GetFun = ?function(delete, 
+					   [?clause([?record(Module, [?field(F#field.name, ?var(V)) || {V, F} <- IndexFields2])], none, 
+								[
+								 begin
+									 ModuleStr = atom_to_list(Module),
+									 Where = [begin
+												  FieldStr = atom_to_list(F#field.name),
+												  ["$", ModuleStr, ".", FieldStr, " = #", ModuleStr, ".", FieldStr, "{", Var, "}"]
+											  end || {Var, F} <- IndexFields2],
+									 Where2 = string:join(Where, " AND "),
+									 String = ["DELETE FROM $", ModuleStr, " WHERE ", Where2, " LIMIT 1;"],
+									 ?cases(?apply(tq_sql, q, [?atom(Module), ?string(lists:flatten(String))]),
+								 	 		[?clause([?ok(?underscore)], none,
+													 [?atom(ok)]),
+								 	 		 ?clause([?error(?var("Reason"))], none,
+								 	 		 		 [?error(?var("Reason"))])])
+									 end
+								 ])]),
+	Export = ?export_fun(GetFun),
+	{[Export], [GetFun]};
 build_delete(_Model) ->
 	{[], []}.
 
