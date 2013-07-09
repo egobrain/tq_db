@@ -29,7 +29,8 @@
 		]).
 
 parse_transform(Ast, Options) ->
-	tq_transform:parse_transform(Ast, Options, [tq_record_transform, ?MODULE]).
+	Ast2 = tq_transform:parse_transform(Ast, Options, [tq_record_transform, ?MODULE]),
+	tq_sql:parse_transform(Ast2).
 
 %% Model.
 
