@@ -1,5 +1,20 @@
 -module(db_simple).
--compile({parse_transform, tq_sql}).
+-compile({parse_transform, tq_sqlmodel_transform}).
+
+-field({index, [index,
+				required,
+				{type, integer},
+				{db_type, number},
+				{db_alias, <<"id">>}]}).
+
+-field({name, [required,
+			   {type, binary},
+			   {db_type, number},
+			   {db_alias, <<"id">>}]}).
+
+-model([{table, <<"simple_table">>},
+		{generate, [get]}
+	   ]).
 
 f() ->
 	A = 3,
