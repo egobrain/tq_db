@@ -51,7 +51,7 @@ build_get(#model{get=true, module=Module, fields=Fields}) ->
 									 io:format("~s",[String]),
 									 ?cases(?apply(tq_sql, q, [?atom(Module), ?string(lists:flatten(String))]),
 								 	 		[?clause([?ok(?list([?var("R")]))], none,
-								 	 				 [?var("R")]),
+								 	 				 [?ok(?var("R"))]),
 								 	 		 ?clause([?ok(?list([]))], none,
 								 	 		 		 [?error(?atom(undefined))]),
 								 	 		 ?clause([?error(?var("Reason"))], none,
