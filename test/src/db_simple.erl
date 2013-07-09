@@ -13,7 +13,7 @@
 			   {db_alias, <<"id">>}]}).
 
 -model([{table, <<"simple_table">>},
-		{generate, [get, delete]}
+		{generate, [get, save, find, delete]}
 	   ]).
 
 f() ->
