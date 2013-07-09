@@ -15,8 +15,9 @@ connect(Args) ->
 
 query(Conn, Sql, Args) ->
 	Args2 = [Val || {_Type, Val} <- Args],
-	Sql2 = lists:flatten(io_lib:format("~s", [io_lib:format(Sql, Args2)])),
-	case pgsql:equery(Conn, Sql2) of
+	Indexes = [[$$, integer_to_list(I)] || I <- lists:seq(1, length(Args))],
+	Sql2 = lists:flatten(io_lib:format(Sql, Indexes)),
+	case pgsql:equery(Conn, Sql2, Args2) of
 		{ok, _Columns, Rows} ->
 			{ok, Rows};
 		{ok, Count} ->

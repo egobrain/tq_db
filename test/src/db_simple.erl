@@ -18,7 +18,9 @@
 
 f() ->
 	A = 3,
-	tq_sql:q(model1, "select @f1, @f2($model2.f1), @* from $model3 where $model4.f2 = #model5.f3{A} and a = #{A}").
+	tq_sql:q(db_simple,
+			 " SELECT @index, @name($db_simple.index), @* FROM $db_simple"
+			 " WHERE $db_simple.id = #db_simple.id{A} AND $db_simple.name LIKE #{\"test\"}").
 
 
 
