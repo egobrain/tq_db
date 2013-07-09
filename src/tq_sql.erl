@@ -26,7 +26,7 @@ query(PoolName, Sql, Args) ->
 		query(PoolName, Sql, Args, Tuple).
 query(PoolName, Sql, Args, Constructor) ->
 	poolboy:transaction(PoolName, fun(Worker) ->
-        gen_server:call(Worker, {query, Sql, Args, Constructor})
+        gen_server:call(Worker, {query, binary_to_list(iolist_to_binary(Sql)), Args, Constructor})
     end).
 
 parse_transform(Ast, _Options)->
