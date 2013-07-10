@@ -64,48 +64,10 @@ build_get(_Model) ->
 	{[], []}.
 
 build_save(#model{save=true}) ->
-	%% "Insert into (Field) values (),"
-	Insert1 = [
-			  ?apply(tq_sql, 'query',
-					 [?atom(db),
-					  ?list([?string("INSERT INTO "),
-							 ?apply('$meta', [?atom(table)]),
-							 ?string("("),
-							 ?apply(string, join,
-									[?list_comp(
-										?apply('$meta', [?tuple([?atom(db_alias), ?var('F')])]),
-										[?generator(?tuple([?var('F'), ?underscore]), ?var('Changed'))]),
-									 ?string(",")]),
-							 ?string(") VALUES ("),
-							 ?apply(string, join,
-									[?list_comp(
-										?string("~s"),
-										[?generator(?underscore, ?var('Changed'))]),
-									 ?string(",")]),
-							 ?string(") RETURNING "),
-							 ?apply('$meta', [?abstract({sql, {db_fields, r}})]),
-							 ?string(";")
-							]),
-					  ?list_comp(
-						 ?tuple([?apply('$meta',[?tuple([?atom(db_type), ?var('F')])]), ?var('V')]),
-						 [?generator(?tuple([?var('F'), ?var('V')]), ?var('Changed'))]),
-					  ?apply(constructor,
-							 [?apply('$meta', [?abstract({db_fields, r})])])
-					 ])
-			 ],
-	Insert2 = [?cases(?var('Changed'),
-					  [?clause([?list([])], none,
-							   [?error(?atom(not_changed))]),
-					   ?clause([?underscore], none,
-								Insert1)])],
-	Clause = ?clause([?var('Model')], none,
-					 [?match(?var('Changed'), ?apply(get_changed_fields, [?var('Model')])),
-					  ?cases(?apply(is_new, [?var('Model')]),
-							 [?clause([?atom(true)], none,
-									  Insert2),
-							  ?clause([?atom(false)], none,
-									  [?atom(update)])])]),
-	SaveFun = ?function(save, [Clause]),
+	SaveFun = ?function(save,
+						[?clause([?var('Model')], none,
+								 [?apply(tq_sqlmodel_runtime, save, [?var('Model')])])
+						]),
 	Export = ?export_fun(SaveFun),
 	{[Export], [SaveFun]};
 build_save(_Model) ->
@@ -146,6 +108,8 @@ build_delete(_Model) ->
 meta_clauses(#model{table=Table, fields=Fields}) ->
 	TableClause = ?clause([?atom(table)], none,
 							[?abstract(Table)]),
+	IndexesClause = ?clause([?atom(indexes)], none,
+							[?list([?atom(F#field.name) || F <- Fields, F#field.is_index =:= true])]),
 	DbAliasClause = [?clause([?tuple([?atom(db_alias), ?var('F')])], none,
 							 [?cases(?var('F'), [?clause([?atom(F#field.name)], none,
 														 [?abstract(F#field.alias)])
@@ -166,6 +130,7 @@ meta_clauses(#model{table=Table, fields=Fields}) ->
 							   [?string(SqlRFields)]),
 
 	lists:flatten([TableClause,
+				   IndexesClause,
 				   DbTypesClause,
 				   DbAliasClause,
 				   DbRFieldsClaues,

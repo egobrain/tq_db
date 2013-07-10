@@ -9,8 +9,8 @@
 
 -field({name, [required,
 			   {type, binary},
-			   {db_type, number},
-			   {db_alias, <<"id">>}]}).
+			   {db_type, string},
+			   {db_alias, <<"name">>}]}).
 
 -model([{table, <<"simple_table">>},
 		{generate, [get, save, find, delete]}
