@@ -64,17 +64,17 @@ build_get(_Model) ->
 	{[], []}.
 
 build_save(#model{save=true, before_save=Hook}) ->
-	ApplyAst = ?apply(tq_sqlmodel_runtime, save, [?var('Model')]),
+	ApplyAst = fun(Var) -> ?apply(tq_sqlmodel_runtime, save, [?var(Var)]) end,
 	Case = fun(F) ->
 				   ?cases(F,
-						  [?clause([?ok(?var('Model'))], none,
-								   [ApplyAst]),
+						  [?clause([?ok(?var('Model2'))], none,
+								   [ApplyAst('Model2')]),
 						   ?clause([?error(?var('Reason'))], none,
 								   [?error(?var('Reason'))])])
 		   end,
 	FunBody = case Hook of
 				  undefined ->
-					  [ApplyAst];
+					  [ApplyAst('Model')];
 				  {Mod, Fun} ->
 					  [Case(?apply(Mod, Fun, [?var('Model')]))];
 				  Fun ->
