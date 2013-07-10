@@ -14,7 +14,10 @@
 				get=false,
 				save=false,
 				delete=false,
-				find=false
+				find=false,
+
+				%% Hooks
+				before_save
 			   }).
 
 -record(field, {name,

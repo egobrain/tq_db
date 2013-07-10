@@ -63,11 +63,24 @@ build_get(#model{get=true, module=Module, fields=Fields}) ->
 build_get(_Model) ->
 	{[], []}.
 
-build_save(#model{save=true}) ->
-	SaveFun = ?function(save,
-						[?clause([?var('Model')], none,
-								 [?apply(tq_sqlmodel_runtime, save, [?var('Model')])])
-						]),
+build_save(#model{save=true, before_save=Hook}) ->
+	ApplyAst = ?apply(tq_sqlmodel_runtime, save, [?var('Model')]),
+	Case = fun(F) ->
+				   ?cases(F,
+						  [?clause([?ok(?var('Model'))], none,
+								   [ApplyAst]),
+						   ?clause([?error(?var('Reason'))], none,
+								   [?error(?var('Reason'))])])
+		   end,
+	FunBody = case Hook of
+				  undefined ->
+					  [ApplyAst];
+				  {Mod, Fun} ->
+					  [Case(?apply(Mod, Fun, [?var('Model')]))];
+				  Fun ->
+					  [Case(?apply(Fun, [?var('Model')]))]
+			  end,
+	SaveFun = ?function(save, [?clause([?var('Model')], none, FunBody)]),
 	Export = ?export_fun(SaveFun),
 	{[Export], [SaveFun]};
 build_save(_Model) ->
