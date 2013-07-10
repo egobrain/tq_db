@@ -45,22 +45,43 @@ parse_transform(Ast, _Options)->
 	end.
 
 %% Node transform.
-transform_node(Node={call,L,{remote,_,{atom,_,tq_sql},{atom,_,q}},[ModelAst, StringAst]}, Errors) ->
+transform_node(Node={call,_,{remote,_,{atom,_,tq_sql},{atom,L1,q}},[ModelAst, StringAst]}, Errors) ->
 	case [ModelAst, StringAst] of
-		[{atom,_,Model},{string,_,String}] ->
+		[{atom,_,Model},{string,L2,String}] ->
 			case scan(String) of
 				{ok, Scan} ->
 					case transform(Scan, Model) of
 						{ok, NewNode} ->
 							{erl_syntax:revert(NewNode), Errors};
 						{error, Reason} ->
-							{Node, [{L, Reason}|Errors]}
+							{Node, [{L2, Reason}|Errors]}
 					end;
 				{error, Reason} ->
-					{Node, [{L, Reason}|Errors]}
+					{Node, [{L2, Reason}|Errors]}
 			end;
 		_ ->
-			{Node, [{L, "syntax error"}|Errors]}
+			{Node, [{L1, "function requires atom and string args"}|Errors]}
+	end;
+transform_node(Node={call, _, {remote, _, {atom, _, Model}, {atom, L1, efind}}, [StringAst]}, Errors) ->
+	case StringAst of
+		{string, L2, String} ->
+			case scan(String) of
+				{ok, Scan} ->
+					case transform(Scan, Model, [], [], []) of
+						{ok, Ast, [], Types} ->
+							ResAst = ?apply(Model,find, [?list(Ast), ?list(Types)]),
+							{erl_syntax:revert(ResAst), Errors};
+						{ok, Ast, _, Types} ->
+							Reason = "getter opertaion @ not allowed in efind queries",
+							{error, [{L2, Reason}|Errors]};
+						{error, Reason} ->
+							{Node, [{L2, Reason}|Errors]}
+					end;
+				{error, Reason} ->
+					{Node, [{L2, Reason}|Errors]}
+			end;
+		_ ->
+			{Node, [{L1, "function requires string arg"}|Errors]}
 	end;
 transform_node(Tuple, Errors) when is_tuple(Tuple) ->
 	List = tuple_to_list(Tuple),

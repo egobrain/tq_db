@@ -87,7 +87,24 @@ build_save(_Model) ->
 	{[], []}.
 
 build_find(#model{find=true}) ->
-	{[], []};
+	Fields = ?apply('$meta', [?abstract({sql, {db_fields, r}})]),
+	Table = ?apply('$meta', [?atom(table)]),
+	Constructor = ?apply('constructor', [?apply('$meta', [?abstract({db_fields, r})])]),
+	Sql = ?list([?string(" SELECT "),
+				 Fields,
+				 ?string(" FROM "),
+				 Table,
+				 ?var('Where')
+				]),
+	FindFun = ?function(find,
+						[?clause([?var('Where'), ?var('Args')], none,
+								 [
+								  begin
+									  ?apply(tq_sql, 'query', [?atom(db), Sql, ?var('Args'), Constructor])
+								  end
+								 ])]),
+	Export = ?export_fun(FindFun),
+	{[Export], [FindFun]};
 build_find(_Model) ->
 	{[], []}.
 
