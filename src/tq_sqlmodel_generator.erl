@@ -105,7 +105,7 @@ build_delete(#model{delete=true, module=Module, fields=Fields}) ->
 												  ["$", ModuleStr, ".", FieldStr, " = #", ModuleStr, ".", FieldStr, "{", Var, "}"]
 											  end || {Var, F} <- IndexFields2],
 									 Where2 = string:join(Where, " AND "),
-									 String = ["DELETE FROM $", ModuleStr, " WHERE ", Where2, " LIMIT 1;"],
+									 String = ["DELETE FROM $", ModuleStr, " WHERE ", Where2, ";"],
 									 ?cases(?apply(tq_sql, q, [?atom(Module), ?string(lists:flatten(String))]),
 								 	 		[?clause([?ok(?underscore)], none,
 													 [?atom(ok)]),
