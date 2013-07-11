@@ -37,7 +37,7 @@ parse_transform(Ast, _Options)->
 		ErrorsAst = [{error, {L, erl_parse, R}} || {L, R} <- Errors],
 		Ast3 = ErrorsAst ++ Ast2,
 		%% ?DBG("~n~p~n<<<<~n", [Ast3]),
-		?DBG("~n~s~n>>>>~n", [tq_transform:pretty_print(Ast3)]),
+		%% ?DBG("~n~s~n>>>>~n", [tq_transform:pretty_print(Ast3)]),
 		Ast3
 	catch T:E ->
 			Reason = io_lib:format("~p:~p | ~p ~n", [T, E, erlang:get_stacktrace()]),
@@ -71,7 +71,7 @@ transform_node(Node={call, _, {remote, _, {atom, _, Model}, {atom, L1, efind}}, 
 						{ok, Ast, [], Types} ->
 							ResAst = ?apply(Model,find, [?list(Ast), ?list(Types)]),
 							{erl_syntax:revert(ResAst), Errors};
-						{ok, Ast, _, Types} ->
+						{ok, _Ast, _, _Types} ->
 							Reason = "getter opertaion @ not allowed in efind queries",
 							{error, [{L2, Reason}|Errors]};
 						{error, Reason} ->
@@ -292,7 +292,6 @@ parse_string(Str) ->
 			{ok, []} ->
 				{error, "interpolation arg required"};
 			{ok, _Forms} ->
-				?DBG("~p", [_Forms]),
 				{error, "multiple arg in interpolation not allowed"};
 			{error, {_, erl_parse, [_, "'.'"]}} ->
 				{error, "interpolation syntax error"};
