@@ -37,7 +37,7 @@ parse_transform(Ast, _Options)->
 		ErrorsAst = [{error, {L, erl_parse, R}} || {L, R} <- Errors],
 		Ast3 = ErrorsAst ++ Ast2,
 		%% ?DBG("~n~p~n<<<<~n", [Ast3]),
-		?DBG("~n~s~n>>>>~n", [tq_transform:pretty_print(Ast3)]),
+		%% ?DBG("~n~s~n>>>>~n", [tq_transform:pretty_print(Ast3)]),
 		Ast3
 	catch T:E ->
 			Reason = io_lib:format("~p:~p | ~p ~n", [T, E, erlang:get_stacktrace()]),
@@ -45,22 +45,43 @@ parse_transform(Ast, _Options)->
 	end.
 
 %% Node transform.
-transform_node(Node={call,L,{remote,_,{atom,_,tq_sql},{atom,_,q}},[ModelAst, StringAst]}, Errors) ->
+transform_node(Node={call,_,{remote,_,{atom,_,tq_sql},{atom,L1,q}},[ModelAst, StringAst]}, Errors) ->
 	case [ModelAst, StringAst] of
-		[{atom,_,Model},{string,_,String}] ->
+		[{atom,_,Model},{string,L2,String}] ->
 			case scan(String) of
 				{ok, Scan} ->
 					case transform(Scan, Model) of
 						{ok, NewNode} ->
 							{erl_syntax:revert(NewNode), Errors};
 						{error, Reason} ->
-							{Node, [{L, Reason}|Errors]}
+							{Node, [{L2, Reason}|Errors]}
 					end;
 				{error, Reason} ->
-					{Node, [{L, Reason}|Errors]}
+					{Node, [{L2, Reason}|Errors]}
 			end;
 		_ ->
-			{Node, [{L, "syntax error"}|Errors]}
+			{Node, [{L1, "function requires atom and string args"}|Errors]}
+	end;
+transform_node(Node={call, _, {remote, _, {atom, _, Model}, {atom, L1, efind}}, [StringAst]}, Errors) ->
+	case StringAst of
+		{string, L2, String} ->
+			case scan(String) of
+				{ok, Scan} ->
+					case transform(Scan, Model, [], [], []) of
+						{ok, Ast, [], Types} ->
+							ResAst = ?apply(Model,find, [?list(Ast), ?list(Types)]),
+							{erl_syntax:revert(ResAst), Errors};
+						{ok, _Ast, _, _Types} ->
+							Reason = "getter opertaion @ not allowed in efind queries",
+							{error, [{L2, Reason}|Errors]};
+						{error, Reason} ->
+							{Node, [{L2, Reason}|Errors]}
+					end;
+				{error, Reason} ->
+					{Node, [{L2, Reason}|Errors]}
+			end;
+		_ ->
+			{Node, [{L1, "function requires string arg"}|Errors]}
 	end;
 transform_node(Tuple, Errors) when is_tuple(Tuple) ->
 	List = tuple_to_list(Tuple),
@@ -271,7 +292,6 @@ parse_string(Str) ->
 			{ok, []} ->
 				{error, "interpolation arg required"};
 			{ok, _Forms} ->
-				?DBG("~p", [_Forms]),
 				{error, "multiple arg in interpolation not allowed"};
 			{error, {_, erl_parse, [_, "'.'"]}} ->
 				{error, "interpolation syntax error"};
