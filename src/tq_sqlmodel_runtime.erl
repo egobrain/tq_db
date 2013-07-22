@@ -8,7 +8,7 @@ save(Model) ->
         {true, []} ->
 			{error,not_changed};
 		{false, []} ->
-			ok;
+			{ok, Model};
 		{IsNew, _} ->
 			Table = Model:'$meta'(table),
 			Returning = Model:'$meta'({sql,{db_fields,r}}),
