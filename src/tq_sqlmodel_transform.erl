@@ -29,7 +29,13 @@
 		]).
 
 parse_transform(Ast, Options) ->
-	tq_transform:parse_transform(Ast, Options, [tq_record_transform, ?MODULE]).
+	try
+		Ast2 = tq_transform:parse_transform(Ast, Options, [tq_record_transform, ?MODULE]),
+		tq_sql:parse_transform(Ast2, Options)
+	catch T:E ->
+			Reason = io_lib:format("~p:~p | ~p ~n", [T, E, erlang:get_stacktrace()]),
+			[{error, {1, erl_parse, Reason}} | Ast]
+	end.
 
 %% Model.
 
@@ -38,6 +44,23 @@ create_model(Module) ->
 
 model_option(table, Table, Model) ->
 	Model2 = Model#model{table = Table},
+	{ok, Model2};
+model_option(generate, Opts, Model) ->
+	Model2 = Model#model{
+			   get = proplists:get_value(get, Opts, false),
+			   save = proplists:get_value(save, Opts, false),
+			   find = proplists:get_value(find, Opts, false),
+			   delete = proplists:get_value(delete, Opts, false)
+			  },
+	{ok, Model2};
+model_option(module, Module, Model) ->
+	Model2 = Model#model{module = Module},
+	{ok, Model2};
+model_option(before_save, Fun, Model) ->
+	Model2 = Model#model{before_save = Fun},
+	{ok, Model2};
+model_option(after_save, Fun, Model) ->
+	Model2 = Model#model{after_save = Fun},
 	{ok, Model2};
 model_option(_Option, _Val, _Model) ->
 	false.
@@ -49,14 +72,17 @@ normalize_model(Model) ->
 			],
 	tq_transform_utils:error_writer_foldl(fun(R, M) -> R(M) end, Model, Rules).
 
-build_model(_Model) ->
-	{[], []}.
+build_model(Model) ->
+	tq_sqlmodel_generator:build_model(Model).
 
 %% Fields.
 
 create_field(Name) ->
 	#field{name=Name}.
 
+field_option(index, IsIndex, Field) ->
+	Field2 = Field#field{is_index=IsIndex},
+	{ok, Field2};
 field_option(db_type, Type, Field) ->
 	Field2 = Field#field{type = Type},
 	{ok, Field2};
