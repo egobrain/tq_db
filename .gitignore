@@ -7,4 +7,5 @@ logs
 ebin
 erl_crash.dump
 #*
+*#*
 .#*

@@ -25,9 +25,13 @@ start_link() ->
 
 init([]) ->
 	{ok, Pools} = application:get_env(tq_db, pools),
-	PoolSpecs = lists:map(fun({Name, Driver, SizeArg, WorkerArg}) ->
+	PoolSpecs = lists:map(fun({Name, {Tag, Driver}, SizeArg, WorkerArg}) ->
+		Worker = case Tag of
+			sql -> tq_sql_worker;
+			kv -> tq_kv_worker
+		end,
 		PoolArgs = [{name, {local, Name}},
-					{worker_module, tq_db_worker}] ++ SizeArg,
+					{worker_module, Worker}] ++ SizeArg,
 		poolboy:child_spec(Name, PoolArgs, {Driver, WorkerArg})
 	end, Pools),
     {ok, { {one_for_one, 5, 10}, PoolSpecs} }.
