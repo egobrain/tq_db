@@ -14,10 +14,10 @@
 	   tq_postgres_driver, 
 	   [{size, 10}, 
 		{max_overflow, 20}],
-	   [{hostname,"m.medianika.com"},
+	   [{hostname,"hostname"},
 		{username,"postgres"},
-		{password,"FOt0I1oDON4G"},
-		{database,"medianika"}
+		{password,"postgres"},
+		{database,"databasename"}
 	   ]
 	  }]}
   ]}
