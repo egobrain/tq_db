@@ -48,7 +48,6 @@ build_get(#model{get=true, module=Module, fields=Fields}) ->
 											  end || {Var, F} <- IndexFields2],
 									 Where2 = string:join(Where, " AND "),
 									 String = ["SELECT @* FROM $", ModuleStr, " WHERE ", Where2, " LIMIT 1;"],
-									 io:format("~s",[String]),
 									 ?cases(?apply(tq_sql, q, [?atom(Module), ?string(lists:flatten(String))]),
 								 	 		[?clause([?ok(?list([?var("R")]))], none,
 								 	 				 [?ok(?var("R"))]),
@@ -63,28 +62,41 @@ build_get(#model{get=true, module=Module, fields=Fields}) ->
 build_get(_Model) ->
 	{[], []}.
 
-build_save(#model{save=true, before_save=Hook}) ->
-	ApplyAst = fun(Var) -> ?apply(tq_sqlmodel_runtime, save, [?var(Var)]) end,
-	Case = fun(F) ->
-				   ?cases(F,
-						  [?clause([?ok(?var('Model2'))], none,
-								   [ApplyAst('Model2')]),
-						   ?clause([?error(?var('Reason'))], none,
-								   [?error(?var('Reason'))])])
-		   end,
-	FunBody = case Hook of
-				  undefined ->
-					  [ApplyAst('Model')];
-				  {Mod, Fun} ->
-					  [Case(?apply(Mod, Fun, [?var('Model')]))];
-				  Fun ->
-					  [Case(?apply(Fun, [?var('Model')]))]
-			  end,
-	SaveFun = ?function(save, [?clause([?var('Model')], none, FunBody)]),
+build_save(#model{save=true, before_save=BeforeSaveHook, after_save=AfterSaveHook}) ->
+	ActionHook = {tq_sqlmodel_runtime, save},
+
+	Before = wrap_ast_if_defined(BeforeSaveHook, ?var('BeforeModel')),
+	Action = wrap_ast_if_defined(ActionHook,     ?var('ActionModel')),
+	After  = wrap_ast_if_defined(AfterSaveHook,  ?var('AfterModel')),
+	Final = fun(VarName) -> [?ok(VarName)] end,
+
+	BodyAst = (Before(Action(After(Final))))(?var('Model')),
+	SaveFun = ?function(save, [?clause([?var('Model')], none, BodyAst)]),
 	Export = ?export_fun(SaveFun),
 	{[Export], [SaveFun]};
 build_save(_Model) ->
 	{[], []}.
+
+wrap_ast_if_defined(Function, NextVarName) ->
+	Case = fun(CaseFun, Next, VarName) ->
+				   ?cases(CaseFun,
+						  [?clause([?ok(VarName)], none,
+								   Next(VarName)),
+						   ?clause([?error(?var('Reason'))], none,
+								   [?error(?var('Reason'))])])
+		   end,
+	fun(Next) ->
+			fun(VarName) ->
+					case Function of
+						undefined ->
+							Next(VarName);
+						{Mod, Fun} ->
+							[Case(?apply(Mod, Fun, [VarName]), Next, NextVarName)];
+						Fun ->
+							[Case(?apply(Fun, [VarName]), Next, NextVarName)]
+					end
+			end
+	end.
 
 build_find(#model{find=true}) ->
 	Fields = ?apply('$meta', [?abstract({sql, {db_fields, r}})]),

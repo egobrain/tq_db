@@ -17,7 +17,8 @@
 				find=false,
 
 				%% Hooks
-				before_save
+				before_save,
+				after_save
 			   }).
 
 -record(field, {name,

@@ -59,6 +59,9 @@ model_option(module, Module, Model) ->
 model_option(before_save, Fun, Model) ->
 	Model2 = Model#model{before_save = Fun},
 	{ok, Model2};
+model_option(after_save, Fun, Model) ->
+	Model2 = Model#model{after_save = Fun},
+	{ok, Model2};
 model_option(_Option, _Val, _Model) ->
 	false.
 

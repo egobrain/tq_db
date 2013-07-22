@@ -14,7 +14,8 @@
 
 -model([{table, <<"simple_table">>},
 		{generate, [get, save, find, delete]},
-		{before_save, test}
+		{before_save, before_save},
+		{after_save, after_save}
 	   ]).
 
 f() ->
