@@ -65,12 +65,18 @@ build_get(_Model) ->
 build_save(#model{save=true, before_save=BeforeSaveHook, after_save=AfterSaveHook}) ->
 	ActionHook = {tq_sqlmodel_runtime, save},
 
-	Before = wrap_ast_if_defined(BeforeSaveHook, ?var('BeforeModel')),
-	Action = wrap_ast_if_defined(ActionHook,     ?var('ActionModel')),
-	After  = wrap_ast_if_defined(AfterSaveHook,  ?var('AfterModel')),
+	ActionList = lists:flatten([BeforeSaveHook, ActionHook, AfterSaveHook]),
+	{ActionList2, _} = lists:mapfoldl(fun(Fun, Cnt) ->
+										 Var = ?var(list_to_atom("Model"++integer_to_list(Cnt))),
+										 {wrap_ast_if_defined(Fun, Var), Cnt+1}
+								 end, 1, ActionList),
 	Final = fun(VarName) -> [?ok(VarName)] end,
 
-	BodyAst = (Before(Action(After(Final))))(?var('Model')),
+	BodyAstFun = lists:foldr(fun(Fun, Acc) ->
+									 Fun(Acc)
+							 end, Final, ActionList2),
+
+	BodyAst = BodyAstFun(?var('Model')),
 	SaveFun = ?function(save, [?clause([?var('Model')], none, BodyAst)]),
 	Export = ?export_fun(SaveFun),
 	{[Export], [SaveFun]};
