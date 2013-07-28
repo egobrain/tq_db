@@ -31,9 +31,6 @@ any_type_constructor(A) -> A.
 before_save(Model) ->
 	{ok, Model:set_tmp({before, Model:tmp()})}.
 
-%% save(Model) ->
-%% 	{ok, Model:set_tmp({save, Model:tmp()})}.
-
 after_save(Model) ->   
 	{ok, Model:set_tmp({'after', Model:tmp()})}.
 
@@ -49,8 +46,14 @@ f() ->
 -include_lib("eunit/include/eunit.hrl").
 
 before_after_test() ->
+	meck:new(tq_sqlmodel_runtime, [unstick, passthrough]),
+	meck:expect(tq_sqlmodel_runtime, 'save',
+				fun(M) ->
+						{ok, M:set_tmp({save, M:tmp()})}
+				end),
 	{ok, Model} = ?MODULE:from_proplist([{tmp, data}]),
 	{ok, Model2} = Model:save(),
+	meck:unload(tq_sqlmodel_runtime),
 	?assertEqual({'after', {save, {before, data}}}, Model2:tmp()).
 
 -endif.

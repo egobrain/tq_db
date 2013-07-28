@@ -64,45 +64,20 @@ build_get(_Model) ->
 
 build_save(#model{save=true, before_save=BeforeSaveHook, after_save=AfterSaveHook}) ->
 	ActionHook = {tq_sqlmodel_runtime, save},
-
-	ActionList = lists:flatten([BeforeSaveHook, ActionHook, AfterSaveHook]),
-	{ActionList2, _} = lists:mapfoldl(fun(Fun, Cnt) ->
-										 Var = ?var(list_to_atom("Model"++integer_to_list(Cnt))),
-										 {wrap_ast_if_defined(Fun, Var), Cnt+1}
-								 end, 1, ActionList),
-	Final = fun(VarName) -> [?ok(VarName)] end,
-
-	BodyAstFun = lists:foldr(fun(Fun, Acc) ->
-									 Fun(Acc)
-							 end, Final, ActionList2),
-
-	BodyAst = BodyAstFun(?var('Model')),
-	SaveFun = ?function(save, [?clause([?var('Model')], none, BodyAst)]),
+	ActionsList = lists:flatten([BeforeSaveHook, ActionHook, AfterSaveHook]),
+	BodyAst =
+		case ActionsList of
+			[Fun] ->
+				function_call(Fun, [?var('Model')]);
+			_ ->
+				?apply(tq_sqlmodel_runtime, success_foldl,
+					   [?var('Model'), ?list([lambda_function(Fun) || Fun <- ActionsList])])
+		end,
+	SaveFun = ?function(save, [?clause([?var('Model')], none, [BodyAst])]),
 	Export = ?export_fun(SaveFun),
 	{[Export], [SaveFun]};
 build_save(_Model) ->
 	{[], []}.
-
-wrap_ast_if_defined(Function, NextVarName) ->
-	Case = fun(CaseFun, Next, VarName) ->
-				   ?cases(CaseFun,
-						  [?clause([?ok(VarName)], none,
-								   Next(VarName)),
-						   ?clause([?error(?var('Reason'))], none,
-								   [?error(?var('Reason'))])])
-		   end,
-	fun(Next) ->
-			fun(VarName) ->
-					case Function of
-						undefined ->
-							Next(VarName);
-						{Mod, Fun} ->
-							[Case(?apply(Mod, Fun, [VarName]), Next, NextVarName)];
-						Fun ->
-							[Case(?apply(Fun, [VarName]), Next, NextVarName)]
-					end
-			end
-	end.
 
 build_find(#model{find=true}) ->
 	Fields = ?apply('$meta', [?abstract({sql, {db_fields, r}})]),
@@ -184,6 +159,31 @@ meta_clauses(#model{table=Table, fields=Fields}) ->
 				   DbRFieldsClaues,
 				   DbWFieldsClaues,
 				   RSqlFieldsClause]).
+
+%% Internal helpers.
+function_call({Mod, Fun, FunArgs}, Args) ->
+	FunArgs2 = [erl_syntax:abstract(A) || A <- FunArgs],
+	?apply(Mod, Fun, FunArgs2++Args);
+function_call({Fun, FunArgs}, Args) when is_list(FunArgs) ->
+	FunArgs2 = [erl_syntax:abstract(A) || A <- FunArgs],
+	?apply(Fun, FunArgs2++Args);
+function_call({Mod, Fun}, Args) ->
+	?apply(Mod, Fun, Args);
+function_call(Fun, Args) ->
+	?apply(Fun, Args).
+
+lambda_function({Mod, Fun, FunArgs}) ->
+	FunArgs2 = [erl_syntax:abstract(A) || A <- FunArgs],
+	?func([?clause([?var('M')], none,
+				   [?apply(Mod, Fun, FunArgs2 ++ [?var('M')])])]);
+lambda_function({Fun, FunArgs}) when is_list(FunArgs) ->
+	FunArgs2 = [erl_syntax:abstract(A) || A <- FunArgs],
+	?func([?clause([?var('M')], none,
+				   [?apply(Fun, FunArgs2 ++ [?var('M')])])]);
+lambda_function({Mod, Fun}) ->
+	?func(Mod, Fun, 1);
+lambda_function(Fun) ->
+	?func(Fun, 1).
 
 atom_to_quated_string(Atom) ->
 	lists:flatten("\""++atom_to_list(Atom)++"\"").
