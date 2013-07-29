@@ -18,7 +18,8 @@
 
 				%% Hooks
 				before_save = [],
-				after_save = [],
+				after_create = [],
+				after_update = [],
 				before_delete = [],
 				after_delete = []
 			   }).

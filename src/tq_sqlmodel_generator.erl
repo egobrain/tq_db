@@ -62,18 +62,30 @@ build_get(#model{get=true, module=Module, fields=Fields}) ->
 build_get(_Model) ->
 	{[], []}.
 
-build_save(#model{save=true, before_save=BeforeSaveHook, after_save=AfterSaveHook}) ->
-	ActionHook = {tq_sqlmodel_runtime, save},
-	ActionsList = lists:flatten([BeforeSaveHook, ActionHook, AfterSaveHook]),
+build_save(#model{save=true,
+				  before_save=BeforeSaveHooks,
+				  after_create=AfterCreateHooks,
+				  after_update=AfterUpdateHooks}) ->
+	BeforeAst = apply_hooks(BeforeSaveHooks ++ [{tq_sqlmodel_runtime, save}], ?var('Model')),
+
 	BodyAst =
-		case ActionsList of
-			[Fun] ->
-				function_call(Fun, [?var('Model')]);
-			_ ->
-				?apply(tq_sqlmodel_runtime, success_foldl,
-					   [?var('Model'), ?list([lambda_function(Fun) || Fun <- ActionsList])])
+		case BeforeSaveHooks =:= [] andalso AfterUpdateHooks =:= [] of
+			true ->
+				[BeforeAst];
+			false ->
+				[?match(?var('IsNew'), ?apply_(?var('Model'), is_new, [])),
+				 ?cases(BeforeAst,
+						[?clause([?ok(?var('ResModel'))], none,
+								 [?cases(?var('IsNew'),
+										 [?clause([?atom(true)], none,
+												  [apply_hooks(AfterCreateHooks, ?var('ResModel'))]),
+										  ?clause([?atom(false)], none,
+												  [apply_hooks(AfterUpdateHooks, ?var('ResModel'))])])]),
+						 ?clause([?error(?var('Reason'))], none,
+								 [?error(?var('Reason'))])
+						])]
 		end,
-	SaveFun = ?function(save, [?clause([?var('Model')], none, [BodyAst])]),
+	SaveFun = ?function(save, [?clause([?var('Model')], none, BodyAst)]),
 	Export = ?export_fun(SaveFun),
 	{[Export], [SaveFun]};
 build_save(_Model) ->
@@ -201,3 +213,11 @@ lambda_function(Fun) ->
 
 atom_to_quated_string(Atom) ->
 	lists:flatten("\""++atom_to_list(Atom)++"\"").
+
+apply_hooks([], Var) ->
+	?ok(Var);
+apply_hooks([Fun], Var) ->
+	function_call(Fun, [Var]);
+apply_hooks(Funs, Var) ->
+	?apply(tq_sqlmodel_runtime, success_foldl,
+		   [Var, ?list([lambda_function(F) || F <- Funs])]).

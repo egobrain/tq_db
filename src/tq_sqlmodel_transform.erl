@@ -31,7 +31,9 @@
 parse_transform(Ast, Options) ->
 	try
 		Ast2 = tq_transform:parse_transform(Ast, Options, [tq_record_transform, ?MODULE]),
-		tq_sql:parse_transform(Ast2, Options)
+		Ast3 = tq_sql:parse_transform(Ast2, Options),
+		io:format("~s", [tq_transform:pretty_print(Ast3)]),
+		Ast3
 	catch T:E ->
 			Reason = io_lib:format("~p:~p | ~p ~n", [T, E, erlang:get_stacktrace()]),
 			[{error, {1, erl_parse, Reason}} | Ast]
@@ -56,25 +58,20 @@ model_option(generate, Opts, Model) ->
 model_option(module, Module, Model) ->
 	Model2 = Model#model{module = Module},
 	{ok, Model2};
-model_option(before_save, Fun, Model) ->
-	Model2 = Model#model{before_save = Fun},
+model_option(before_save, Data, Model) ->
+	Model2 = Model#model{before_save = to_list(Data)},
 	{ok, Model2};
-model_option(after_save, Fun, Model) ->
-	Model2 = Model#model{after_save = Fun},
+model_option(after_create, Data, Model) ->
+	Model2 = Model#model{after_create = to_list(Data)},
+	{ok, Model2};
+model_option(after_update, Data, Model) ->
+	Model2 = Model#model{after_update = to_list(Data)},
 	{ok, Model2};
 model_option(before_delete, Data, Model) ->
-	Funs = case is_list(Data) of
-				true -> Data;
-				false -> [Data]
-		   end,
-	Model2 = Model#model{before_delete = Funs},
+	Model2 = Model#model{before_delete = to_list(Data)},
 	{ok, Model2};
 model_option(after_delete, Data, Model) ->
-	Funs = case is_list(Data) of
-			   true -> Data;
-			   false -> [Data]
-		   end,
-	Model2 = Model#model{after_delete = Funs},
+	Model2 = Model#model{after_delete = to_list(Data)},
 	{ok, Model2};
 model_option(_Option, _Val, _Model) ->
 	false.
@@ -201,6 +198,11 @@ is_quated(A) ->
 		false ->
 			false
 	end.
+
+to_list(A) when is_list(A) ->
+	A;
+to_list(A) -> [A].
+
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

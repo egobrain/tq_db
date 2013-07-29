@@ -5,6 +5,7 @@
 -define(apply(Fun,Args),erl_syntax:application(?atom(Fun),Args)).
 -define(apply(Mod,Fun,Args),erl_syntax:application(?atom(Mod),?atom(Fun),Args)).
 -define(apply_(Fun,Args),erl_syntax:application(Fun,Args)).
+-define(apply_(Mod, Fun,Args),erl_syntax:application(Mod, ?atom(Fun), Args)).
 -define(clause(Pattern,Guard,Body),erl_syntax:clause(Pattern,Guard,Body)).
 -define(cases(Arg,Clauses),erl_syntax:case_expr(Arg,Clauses)).
 -define(ifs(Clauses),erl_syntax:if_expr(Clauses)).
