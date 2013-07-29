@@ -62,6 +62,20 @@ model_option(before_save, Fun, Model) ->
 model_option(after_save, Fun, Model) ->
 	Model2 = Model#model{after_save = Fun},
 	{ok, Model2};
+model_option(before_delete, Data, Model) ->
+	Funs = case is_list(Data) of
+				true -> Data;
+				false -> [Data]
+		   end,
+	Model2 = Model#model{before_delete = Funs},
+	{ok, Model2};
+model_option(after_delete, Data, Model) ->
+	Funs = case is_list(Data) of
+			   true -> Data;
+			   false -> [Data]
+		   end,
+	Model2 = Model#model{after_delete = Funs},
+	{ok, Model2};
 model_option(_Option, _Val, _Model) ->
 	false.
 

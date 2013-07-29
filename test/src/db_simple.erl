@@ -22,8 +22,11 @@
 
 -model([{table, <<"simple_table">>},
 		{generate, [get, save, find, delete]},
+
 		{before_save, before_save},
-		{after_save, after_save}
+		{after_save, after_save},
+		{before_delete, before_delete},
+		{after_delete, after_delete}
 	   ]).
 
 any_type_constructor(A) -> A.
@@ -33,6 +36,12 @@ before_save(Model) ->
 
 after_save(Model) ->   
 	{ok, Model:set_tmp({'after', Model:tmp()})}.
+
+before_delete(_Model) ->
+	ok.
+after_delete(_Model) ->
+	ok.
+
 
 f() ->
 	A = 3,

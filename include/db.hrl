@@ -18,7 +18,9 @@
 
 				%% Hooks
 				before_save = [],
-				after_save = []
+				after_save = [],
+				before_delete = [],
+				after_delete = []
 			   }).
 
 -record(field, {name,
