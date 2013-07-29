@@ -68,7 +68,7 @@ build_save(#model{save=true,
 	BeforeAst = apply_hooks(BeforeSaveHooks ++ [{tq_sqlmodel_runtime, save}], ?var('Model')),
 
 	BodyAst =
-		case BeforeSaveHooks =:= [] andalso AfterUpdateHooks =:= [] of
+		case AfterCreateHooks =:= [] andalso AfterUpdateHooks =:= [] of
 			true ->
 				[BeforeAst];
 			false ->
