@@ -47,7 +47,7 @@ f() ->
 	A = 3,
 	tq_sql:q(db_simple,
 			 " SELECT @index, @name($db_simple.index), @* FROM $db_simple"
-			 " WHERE $db_simple.id = #db_simple.id{A} AND $db_simple.name LIKE #{\"test\"}").
+			 " WHERE $db_simple.index = #db_simple.index{A} AND $db_simple.name LIKE #{\"test\"}").
 
 
 

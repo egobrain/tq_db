@@ -31,9 +31,7 @@
 parse_transform(Ast, Options) ->
 	try
 		Ast2 = tq_transform:parse_transform(Ast, Options, [tq_record_transform, ?MODULE]),
-		Ast3 = tq_sql:parse_transform(Ast2, Options),
-		io:format("~s", [tq_transform:pretty_print(Ast3)]),
-		Ast3
+		tq_sql:parse_transform(Ast2, Options)
 	catch T:E ->
 			Reason = io_lib:format("~p:~p | ~p ~n", [T, E, erlang:get_stacktrace()]),
 			[{error, {1, erl_parse, Reason}} | Ast]

@@ -57,6 +57,11 @@
 -define(export_fun(Fun), ?export(erl_syntax:atom_value(erl_syntax:function_name(Fun)), erl_syntax:function_arity(Fun))).
 -define(export_funs(Funs), ?export_all([{erl_syntax:atom_value(erl_syntax:function_name(F__)), erl_syntax:function_arity(F__)} || F__ <- Funs])).
 
+-define(binary(Data), erl_syntax:binary([case F__ of
+											 {D__, T__} -> erl_syntax:binary_field(D__, [?atom(T__)]);
+											 _ -> erl_syntax:binary_field(F__)
+										 end || F__ <- Data])).
+
 -define(ok(A),?tuple([?atom(ok),A])).
 -define(error(A),?tuple([?atom(error),A])).
 -define(error(A,B),?error(?tuple([A,B]))).

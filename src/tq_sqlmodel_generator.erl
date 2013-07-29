@@ -31,7 +31,6 @@ build_model(Model) ->
 						{[IB | IBlock], [FB | FBlock]}
 				end, {[], []}, Builders).
 
-
 build_get(#model{get=true, module=Module, fields=Fields}) ->
 	IndexFields = [F || F <- Fields, F#field.is_index =:= true],
 	Vars = ["Var" ++ integer_to_list(I) || I <- lists:seq(1, length(IndexFields))],
@@ -91,22 +90,15 @@ build_save(#model{save=true,
 build_save(_Model) ->
 	{[], []}.
 
-build_find(#model{find=true}) ->
-	Fields = ?apply('$meta', [?abstract({sql, {db_fields, r}})]),
-	Table = ?apply('$meta', [?atom(table)]),
-	Constructor = ?apply('constructor', [?apply('$meta', [?abstract({db_fields, r})])]),
-	Sql = ?list([?string(" SELECT "),
-				 Fields,
-				 ?string(" FROM "),
-				 Table,
-				 ?var('Where')
-				]),
+build_find(#model{module=Module, find=true}) ->
+	Sql = "SELECT @* FROM $" ++ atom_to_list(Module) ++ " ",
 	FindFun = ?function(find,
 						[?clause([?var('Where'), ?var('Args')], none,
-								 [
-								  begin
-									  ?apply(tq_sql, 'query', [?atom(db), Sql, ?var('Args'), Constructor])
-								  end
+								 [?apply(tq_runtime_sql, model_query,
+										 [?atom(db), ?atom(Module),
+										  ?binary([?abstract(Sql), {?var('Where'), binary}]),
+										  ?var('Args')
+										 ])
 								 ])]),
 	Export = ?export_fun(FindFun),
 	{[Export], [FindFun]};

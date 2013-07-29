@@ -62,27 +62,6 @@ transform_node(Node={call,_,{remote,_,{atom,_,tq_sql},{atom,L1,q}},[ModelAst, St
 		_ ->
 			{Node, [{L1, "function requires atom and string args"}|Errors]}
 	end;
-transform_node(Node={call, _, {remote, _, {atom, _, Model}, {atom, L1, efind}}, [StringAst]}, Errors) ->
-	case StringAst of
-		{string, L2, String} ->
-			case scan(String) of
-				{ok, Scan} ->
-					case transform(Scan, Model, [], [], []) of
-						{ok, Ast, [], Types} ->
-							ResAst = ?apply(Model,find, [?list(Ast), ?list(Types)]),
-							{erl_syntax:revert(ResAst), Errors};
-						{ok, _Ast, _, _Types} ->
-							Reason = "getter opertaion @ not allowed in efind queries",
-							{error, [{L2, Reason}|Errors]};
-						{error, Reason} ->
-							{Node, [{L2, Reason}|Errors]}
-					end;
-				{error, Reason} ->
-					{Node, [{L2, Reason}|Errors]}
-			end;
-		_ ->
-			{Node, [{L1, "function requires string arg"}|Errors]}
-	end;
 transform_node(Tuple, Errors) when is_tuple(Tuple) ->
 	List = tuple_to_list(Tuple),
 	{List2, Errors2} = lists:mapfoldl(fun transform_node/2, Errors, List),
