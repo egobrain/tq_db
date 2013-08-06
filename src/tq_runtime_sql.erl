@@ -103,8 +103,10 @@ scan_type(Data, Fun) ->
 								Field = binary_to_atom(FieldStr),
 								Fun(Model:'$meta'({db_type, Field}), Rest2)
 						end);
-			 (_Model, _Rest3) ->
-				  {error, "model field must be specified"}
+			 (<<>>, _Rest) ->
+				  {error, "model field must be specified"};
+			 (TypeStr, Rest) ->
+				  Fun(binary_to_atom(TypeStr), Rest)
 		  end).
 
 token(Data, Fun) ->
