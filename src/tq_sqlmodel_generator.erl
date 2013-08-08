@@ -109,10 +109,10 @@ build_delete(#model{delete=true, module=Module, fields=Fields, before_delete=Bef
 	IndexFields = [F || F <- Fields, F#field.is_index =:= true],
 	Vars = ["Var" ++ integer_to_list(I) || I <- lists:seq(1, length(IndexFields))],
 	IndexFields2 = lists:zip(Vars, IndexFields),
-
 	DeleteClause =
-		[?clause([?match(?record(Module, [?field(F#field.name, ?var(V)) || {V, F} <- IndexFields2]), ?var('Model'))], none,
+		[?clause([?var('Model')], none,
 				 [
+				  ?match(?record(Module, [?field(F#field.name, ?var(V)) || {V, F} <- IndexFields2]), ?var('Model')),
 				  begin
 					  ModuleStr = atom_to_list(Module),
 					  Where = [begin
