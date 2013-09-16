@@ -42,6 +42,11 @@ parse(<<$@, Rest/binary>>, {Model, _Args} = Opts, {Sql, Types, Fields}) when Mod
 			   (Field, Rest2) ->
 					parse(Rest2, Opts, {<<Sql/binary, (Model:'$meta'({db_alias, Field}))/binary>>, Types, [Field|Fields]})
 			end);
+parse(<<"$$", Rest/binary>>, Opts, {Sql, Types, Fields}) ->
+	scan_full_alias(Rest,
+			   fun(Alias, Rest2) ->
+					   parse(Rest2, Opts, {<<Sql/binary, Alias/binary>>, Types, Fields})
+			   end);
 parse(<<$$, Rest/binary>>, Opts, {Sql, Types, Fields}) ->
 	scan_alias(Rest,
 			   fun(Alias, Rest2) ->
@@ -85,11 +90,28 @@ scan_alias(Data, Fun) ->
 						fun(FieldStr, Rest2) ->
 								Model = binary_to_atom(ModelStr),
 								Field = binary_to_atom(FieldStr),
-								Fun(Model:'$meta'({db_alias, Field}), Rest2)
+								Alias = Model:'$meta'({db_alias, Field}),
+								Fun(Alias, Rest2)
 						end);
 			 (ModelStr, Rest) ->
 				  Model2 = binary_to_atom(ModelStr),
 				  Fun(Model2:'$meta'(table), Rest)
+		  end).
+
+scan_full_alias(Data, Fun) ->
+	token(Data,
+		  fun(ModelStr, <<$., Rest/binary>>) ->
+				  token(Rest,
+						fun(FieldStr, Rest2) ->
+								Model = binary_to_atom(ModelStr),
+								Field = binary_to_atom(FieldStr),
+								Table = Model:'$meta'(table),
+								Alias = Model:'$meta'({db_alias, Field}),
+								FullAlias = <<Table/binary, $., Alias/binary>>,
+								Fun(FullAlias, Rest2)
+						end);
+			 (_ModelStr, Rest) ->
+				  {error, "model field must be specified"}
 		  end).
 
 %% Scan type
@@ -112,15 +134,10 @@ scan_type(Data, Fun) ->
 token(Data, Fun) ->
 	token(Data, Fun, <<>>).
 
-token(<<C,_/binary>>=Data, Fun, Acc) 
-  when C =:= $(; C =:= $); C =:= $<; C =:= $>; C =:= $@;
-	   C =:= $,; C =:= $;; C =:= $:; C =:= $\\; C =:= $";
-	   C =:= $/; C =:= $[; C =:= $]; C =:= $?; C =:= $=;
-	   C =:= ${; C =:= $}; C =:= $\s; C =:= $\t; C=:= $.;
-	   C < 32; C =:= 127 ->
-	Fun(Acc, Data);
-token(<<C, Rest/binary>>, Fun, Acc) ->
+token(<<C, Rest/binary>>, Fun, Acc) when C >= $A, C =< $z ->
 	token(Rest, Fun, <<Acc/binary, C>>);
+token(<<C,_/binary>>=Data, Fun, Acc) ->
+	Fun(Acc, Data);
 token(<<>>, Fun, Acc) ->
 	Fun(Acc, <<>>).
 
