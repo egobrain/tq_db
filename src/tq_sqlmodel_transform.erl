@@ -18,6 +18,7 @@
 -export([create_model/1,
          model_option/3,
          normalize_model/1,
+         set_globals/2,
          build_model/1,
 
          create_field/1,
@@ -83,6 +84,9 @@ normalize_model(Model) ->
              fun table_quoted_rule/1
             ],
     tq_transform_utils:error_writer_foldl(fun(R, M) -> R(M) end, Model, Rules).
+
+set_globals(_Globals, Model) ->
+    {ok, Model}.
 
 build_model(Model) ->
     tq_sqlmodel_generator:build_model(Model).

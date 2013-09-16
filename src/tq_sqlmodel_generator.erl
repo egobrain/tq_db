@@ -115,9 +115,9 @@ build_delete(#model{delete=true, module=Module, fields=Fields, before_delete=Bef
     Vars = ["Var" ++ integer_to_list(I) || I <- lists:seq(1, length(IndexFields))],
     IndexFields2 = lists:zip(Vars, IndexFields),
     DeleteClause =
-        [?clause([?var('Model')], none,
+        [?clause([?var('M')], none,
                  [
-                  ?match(?record(Module, [?field(F#field.name, ?var(V)) || {V, F} <- IndexFields2]), ?var('Model')),
+                  ?match(?record(Module, [?field(F#field.name, ?var(V)) || {V, F} <- IndexFields2]), ?var('M')),
                   begin
                       ModuleStr = atom_to_list(Module),
                       Where = [begin
@@ -128,7 +128,7 @@ build_delete(#model{delete=true, module=Module, fields=Fields, before_delete=Bef
                       String = ["DELETE FROM $", ModuleStr, " WHERE ", Where2, ";"],
                       ?cases(?apply(tq_sql, q, [?atom(Module), ?string(lists:flatten(String))]),
                              [?clause([?ok(?underscore)], none,
-                                      [function_call(F, [?var('Model')]) || F <- AfterHooks]++[?atom(ok)]),
+                                      [function_call(F, [?var('M')]) || F <- AfterHooks]++[?atom(ok)]),
                               ?clause([?error(?var("Reason"))], none,
                                       [?error(?var("Reason"))])])
                   end
