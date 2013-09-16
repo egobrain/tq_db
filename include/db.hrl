@@ -1,32 +1,36 @@
 -record(access_mode,{
-		  r = true :: boolean(),
-		  sr = true :: boolean(),
-		  w = true :: boolean(),
-		  sw = true :: boolean()
-		 }).
+          r = true :: boolean(),
+          sr = true :: boolean(),
+          w = true :: boolean(),
+          sw = true :: boolean()
+         }).
 
--record(model, {module,
-				fields = [],
-				table,
-				stores_in_db,
+-record(model, {
+          module,
+          fields = [],
+          table,
+          stores_in_db,
 
-				%% Generate
-				get=false,
-				save=false,
-				delete=false,
-				find=false,
+          %% Generate
+          get=false,
+          save=false,
+          delete=false,
+          find=false,
 
-				%% Hooks
-				before_save = [],
-				after_create = [],
-				after_update = [],
-				before_delete = [],
-				after_delete = []
-			   }).
+          %% Hooks
+          init_fun = [],
 
--record(field, {name,
-				type,
-				alias,
-				is_index = false,
-				mode = #access_mode{}
-			   }).
+          before_save = [],
+          after_create = [],
+          after_update = [],
+          before_delete = [],
+          after_delete = []
+         }).
+
+-record(field, {
+          name,
+          type,
+          alias,
+          is_index = false,
+          mode = #access_mode{}
+         }).

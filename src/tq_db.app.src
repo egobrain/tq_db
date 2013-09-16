@@ -9,22 +9,22 @@
                  ]},
   {mod, {tq_db_app, []}},
   {env, [
-		 {pools,
-		  [{pool1, {sql, tq_postgres_driver}, 
-			[{size, 10}, 
-			 {max_overflow, 20}],
-			[{hostname,"localhost"},
-			 {username,"postgres"},
-			 {password,"postgres"},
-			 {database,"test_db"}
-			]
-		   },
-		   {session, {kv, tq_riak_driver},
-			[{size, 10}, 
-			 {max_overflow, 20}],
-			[{hostname, "localhost"},
-			 {bucket, <<"test_bucket">>}
-			]
-		   }]}
-		]}
+   {pools,
+    [{pool1, {sql, tq_postgres_driver},
+   [{size, 10},
+    {max_overflow, 20}],
+   [{hostname,"localhost"},
+    {username,"postgres"},
+    {password,"postgres"},
+    {database,"test_db"}
+   ]
+     },
+     {session, {kv, tq_riak_driver},
+   [{size, 10},
+    {max_overflow, 20}],
+   [{hostname, "localhost"},
+    {bucket, <<"test_bucket">>}
+   ]
+     }]}
+  ]}
  ]}.
