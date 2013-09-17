@@ -11,7 +11,7 @@
           find=false,
 
           %% Hooks
-          init_fun = [],
+          init_funs = [] :: atom() | {atom(), atom()} | {atom(), list()} | {atom(), atom(), list()},
 
           before_save = [],
           after_create = [],
@@ -25,5 +25,7 @@
           type,
           alias,
           is_index = false,
-          record
+          record,
+
+          init_funs = [] :: atom() | {atom(), atom()} | {atom(), list()} | {atom(), atom(), list()}
          }).

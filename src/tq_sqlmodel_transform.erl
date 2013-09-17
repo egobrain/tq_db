@@ -44,8 +44,10 @@ parse_transform(Ast, Options) ->
 create_model(Module) ->
     #db_model{module=Module}.
 
-model_option(init, InitFun, Model) ->
-    Model2 = Model#db_model{init_fun=InitFun},
+model_option(init, NewInitFuns,  #db_model{init_funs=InitFuns}=Model) ->
+    Model2 = Model#db_model{
+               init_funs = InitFuns ++ to_list(NewInitFuns)
+              },
     {ok, Model2};
 model_option(table, Table, Model) ->
     Model2 = Model#db_model{table = Table},
@@ -113,6 +115,11 @@ field_option(db_type, Type, Field) ->
     {ok, Field2};
 field_option(db_alias, Alias, Field) ->
     Field2 = Field#db_field{alias = Alias},
+    {ok, Field2};
+field_option(init, NewInitFuns, #db_field{init_funs=InitFuns}=Field) ->
+    Field2 = Field#db_field{
+               init_funs = InitFuns ++ to_list(NewInitFuns)
+              },
     {ok, Field2};
 field_option(_Option, _Val, _Field) ->
     false.
@@ -204,7 +211,6 @@ is_quated(A) ->
 to_list(A) when is_list(A) ->
     A;
 to_list(A) -> [A].
-
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

@@ -31,7 +31,9 @@ build_model(Model) ->
                 fun build_get/1,
                 fun build_save/1,
                 fun build_find/1,
-                fun build_delete/1
+                fun build_delete/1,
+
+                fun build_internal_functions/1
                ],
     lists:foldl(fun(F, {IBlock, FBlock}) ->
                         {IB, FB} = F(Model),
@@ -153,6 +155,54 @@ build_delete(#db_model{delete=true, module=Module, fields=Fields, before_delete=
 build_delete(_Model) ->
     {[], []}.
 
+build_internal_functions(Model) ->
+    Funs = [
+            field_constructor_function(Model),
+            constructor1_function(Model)
+           ],
+    Exports = ?export_funs(Funs),
+    {Exports, Funs}.
+
+constructor1_function(#db_model{init_funs=InitFuns, module=Module}) ->
+    SetIsNotNew = ?record(?var('Model'), Module, [?field('$is_new$', ?atom(false))]),
+    FinalForm = apply_init_hooks(InitFuns, SetIsNotNew),
+    ?function(constructor,
+              [?clause([?var('Fields')], none,
+                       [?match(?var('Constructors'),
+                               ?list_comp(?apply(field_constructor, [?var('F')]),
+                                          [?generator(?var('F'), ?var('Fields'))])),
+                        ?func([?clause([?var('List')], none,
+                                       [?match(?var('Model'),
+                                               ?apply(lists, foldl,
+                                                      [?func([?clause([?tuple([?var('F'), ?var('A')]), ?var('M')], none,
+                                                                      [?apply_(?var('F'), [?var('A'), ?var('M')])])]),
+                                                       ?apply(new, []),
+                                                       ?apply(lists, zip, [?var('Constructors'), ?var('List')])])),
+                                        FinalForm
+                                       ]
+                                      )])])]).
+
+field_constructor_function(#db_model{fields=Fields, module=Module}) ->
+    DefaultClasuse = ?clause([?var('Fun')], [?nif_is_function(?var('Fun'))], [?var('Fun')]),
+    SetterAst = fun(F) -> ?apply(?prefix_set(F#db_field.name),
+                                 [apply_init_hooks(F#db_field.init_funs, ?var('Val')),
+                                  ?var('Model')])
+                end,
+    ?function(field_constructor,
+              [?clause([?atom(F#db_field.name)], none,
+                       [?func([?clause([?var('Val'), ?var('Model')], none,
+                                       case F#db_field.record#record_field.stores_in_record of
+                                           true ->
+                                               [?match(?var('F'),SetterAst(F)),
+                                                ?record(?var('F'), Module, [?field(?changed_suffix(F#db_field.name), ?atom(false))])];
+                                           false ->
+                                               [SetterAst(F)]
+                                       end)])]) ||
+                  F <- Fields,
+                  F#db_field.record#record_field.setter =/= false
+              ] ++ [DefaultClasuse]).
+
+
 meta_clauses(#db_model{table=Table, fields=Fields}) ->
     TableClause = ?clause([?atom(table)], none,
                           [?abstract(Table)]),
@@ -221,3 +271,10 @@ apply_hooks([Fun], Var) ->
 apply_hooks(Funs, Var) ->
     ?apply(tq_sqlmodel_runtime, success_foldl,
            [Var, ?list([lambda_function(F) || F <- Funs])]).
+
+apply_init_hooks([], Var) ->
+    Var;
+apply_init_hooks([Fun], Var) ->
+    function_call(Fun, [Var]);
+apply_init_hooks([Fun|Rest], Var) ->
+    apply_init_hooks(Rest, function_call(Fun, [Var])).
