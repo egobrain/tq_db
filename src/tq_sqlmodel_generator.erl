@@ -17,7 +17,7 @@
 -include("include/ast_helpers.hrl").
 
 -include("deps/tq_transform/include/record_model.hrl").
--include("include/db.hrl").
+-include("include/db_model.hrl").
 
 -export([build_model/1, meta_clauses/1]).
 
@@ -38,8 +38,8 @@ build_model(Model) ->
                         {[IB | IBlock], [FB | FBlock]}
                 end, {[], []}, Builders).
 
-build_get(#model{get=true, module=Module, fields=Fields}) ->
-    IndexFields = [F || F <- Fields, F#field.is_index =:= true],
+build_get(#db_model{get=true, module=Module, fields=Fields}) ->
+    IndexFields = [F || F <- Fields, F#db_field.is_index =:= true],
     Vars = ["Var" ++ integer_to_list(I) || I <- lists:seq(1, length(IndexFields))],
 
     GetFun = ?function(get,
@@ -49,7 +49,7 @@ build_get(#model{get=true, module=Module, fields=Fields}) ->
                                      ModuleStr = atom_to_list(Module),
                                      IndexFields2 = lists:zip(Vars, IndexFields),
                                      Where = [begin
-                                                  FieldStr = atom_to_list(F#field.name),
+                                                  FieldStr = atom_to_list(F#db_field.name),
                                                   ["$", ModuleStr, ".", FieldStr, " = #", ModuleStr, ".", FieldStr, "{", Var, "}"]
                                               end || {Var, F} <- IndexFields2],
                                      Where2 = string:join(Where, " AND "),
@@ -68,7 +68,7 @@ build_get(#model{get=true, module=Module, fields=Fields}) ->
 build_get(_Model) ->
     {[], []}.
 
-build_save(#model{save=true,
+build_save(#db_model{save=true,
                   before_save=BeforeSaveHooks,
                   after_create=AfterCreateHooks,
                   after_update=AfterUpdateHooks}) ->
@@ -97,7 +97,7 @@ build_save(#model{save=true,
 build_save(_Model) ->
     {[], []}.
 
-build_find(#model{module=Module, find=true}) ->
+build_find(#db_model{module=Module, find=true}) ->
     Sql = "SELECT @* FROM $" ++ atom_to_list(Module) ++ " ",
     FindFun = ?function(find,
                         [?clause([?var('Where'), ?var('Args')], none,
@@ -112,18 +112,18 @@ build_find(#model{module=Module, find=true}) ->
 build_find(_Model) ->
     {[], []}.
 
-build_delete(#model{delete=true, module=Module, fields=Fields, before_delete=BeforeHooks, after_delete=AfterHooks}) ->
-    IndexFields = [F || F <- Fields, F#field.is_index =:= true],
+build_delete(#db_model{delete=true, module=Module, fields=Fields, before_delete=BeforeHooks, after_delete=AfterHooks}) ->
+    IndexFields = [F || F <- Fields, F#db_field.is_index =:= true],
     Vars = ["Var" ++ integer_to_list(I) || I <- lists:seq(1, length(IndexFields))],
     IndexFields2 = lists:zip(Vars, IndexFields),
     DeleteClause =
         [?clause([?var('M')], none,
                  [
-                  ?match(?record(Module, [?field(F#field.name, ?var(V)) || {V, F} <- IndexFields2]), ?var('M')),
+                  ?match(?record(Module, [?field(F#db_field.name, ?var(V)) || {V, F} <- IndexFields2]), ?var('M')),
                   begin
                       ModuleStr = atom_to_list(Module),
                       Where = [begin
-                                   FieldStr = atom_to_list(F#field.name),
+                                   FieldStr = atom_to_list(F#db_field.name),
                                    ["$", ModuleStr, ".", FieldStr, " = #", ModuleStr, ".", FieldStr, "{", Var, "}"]
                                end || {Var, F} <- IndexFields2],
                       Where2 = string:join(Where, " AND "),
@@ -153,28 +153,28 @@ build_delete(#model{delete=true, module=Module, fields=Fields, before_delete=Bef
 build_delete(_Model) ->
     {[], []}.
 
-meta_clauses(#model{table=Table, fields=Fields}) ->
+meta_clauses(#db_model{table=Table, fields=Fields}) ->
     TableClause = ?clause([?atom(table)], none,
                           [?abstract(Table)]),
     IndexesClause = ?clause([?atom(indexes)], none,
-                            [?list([?atom(F#field.name) || F <- Fields, F#field.is_index =:= true])]),
+                            [?list([?atom(F#db_field.name) || F <- Fields, F#db_field.is_index =:= true])]),
     DbAliasClause = [?clause([?tuple([?atom(db_alias), ?var('F')])], none,
-                             [?cases(?var('F'), [?clause([?atom(F#field.name)], none,
-                                                         [?abstract(F#field.alias)])
+                             [?cases(?var('F'), [?clause([?atom(F#db_field.name)], none,
+                                                         [?abstract(F#db_field.alias)])
                                                  || F <- Fields])])],
     DbTypesClause = [?clause([?tuple([?atom(db_type), ?var('F')])], none,
-                             [?cases(?var('F'), [?clause([?atom(F#field.name)], none,
-                                                         [?abstract(F#field.type)])
+                             [?cases(?var('F'), [?clause([?atom(F#db_field.name)], none,
+                                                         [?abstract(F#db_field.type)])
                                                  || F <- Fields])])],
     DbRFieldsClaues = ?clause([?abstract({db_fields, r})], none,
-                              [?list([?atom(F#field.name)
+                              [?list([?atom(F#db_field.name)
                                       || F <- Fields,
-                                         F#field.record#record_field.mode#access_mode.sr])]),
+                                         F#db_field.record#record_field.mode#access_mode.sr])]),
     DbWFieldsClaues = ?clause([?abstract({db_fields, w})], none,
-                              [?list([?atom(F#field.name)
-                                      || F <- Fields, F#field.record#record_field.mode#access_mode.sw])]),
-    [$, | SqlRFields] = lists:flatten([[$,, atom_to_quated_string(F#field.name)]
-                                       || F <- Fields, F#field.record#record_field.mode#access_mode.sr]),
+                              [?list([?atom(F#db_field.name)
+                                      || F <- Fields, F#db_field.record#record_field.mode#access_mode.sw])]),
+    [$, | SqlRFields] = lists:flatten([[$,, atom_to_quated_string(F#db_field.name)]
+                                       || F <- Fields, F#db_field.record#record_field.mode#access_mode.sr]),
     RSqlFieldsClause = ?clause([?abstract({sql, {db_fields, r}})], none,
                                [?string(SqlRFields)]),
 

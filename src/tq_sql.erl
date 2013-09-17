@@ -298,11 +298,11 @@ scan_test_() ->
          {"$test", [{table_alias, test}]},
          {"$test.a", [{field_alias, test, a}]},
 
-         {"#model.field{test}", [{field_type, model, field, P("test")}]},
-         {"#model.field{\"\"}", [{field_type, model, field, P("\"\"")}]},
-         {"#model.field{\"test\"}", [{field_type, model, field, P("\"test\"")}]},
-         {"#model.field{\"test 1,2,4 -s }{}{\"}", [{field_type, model, field, P("\"test 1,2,4 -s }{}{\"")}]},
-         {"#model.field{'test 1,2,4 -s }{}{'}", [{field_type, model, field, P("'test 1,2,4 -s }{}{'")}]},
+         {"#db_model.field{test}", [{field_type, db_model, field, P("test")}]},
+         {"#db_model.field{\"\"}", [{field_type, db_model, field, P("\"\"")}]},
+         {"#db_model.field{\"test\"}", [{field_type, db_model, field, P("\"test\"")}]},
+         {"#db_model.field{\"test 1,2,4 -s }{}{\"}", [{field_type, db_model, field, P("\"test 1,2,4 -s }{}{\"")}]},
+         {"#db_model.field{'test 1,2,4 -s }{}{'}", [{field_type, db_model, field, P("'test 1,2,4 -s }{}{'")}]},
 
          {"#{A}", [{inline, P("A")}]}
         ],

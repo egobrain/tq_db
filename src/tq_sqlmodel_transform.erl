@@ -11,7 +11,7 @@
 
 -behavior(tq_transform_plugin).
 
--include("include/db.hrl").
+-include("include/db_model.hrl").
 -include("deps/tq_transform/include/record_model.hrl").
 
 -export([parse_transform/2]).
@@ -42,16 +42,16 @@ parse_transform(Ast, Options) ->
 %% Model.
 
 create_model(Module) ->
-    #model{module=Module}.
+    #db_model{module=Module}.
 
 model_option(init, InitFun, Model) ->
-    Model2 = Model#model{init_fun=InitFun},
+    Model2 = Model#db_model{init_fun=InitFun},
     {ok, Model2};
 model_option(table, Table, Model) ->
-    Model2 = Model#model{table = Table},
+    Model2 = Model#db_model{table = Table},
     {ok, Model2};
 model_option(generate, Opts, Model) ->
-    Model2 = Model#model{
+    Model2 = Model#db_model{
                get = proplists:get_value(get, Opts, false),
                save = proplists:get_value(save, Opts, false),
                find = proplists:get_value(find, Opts, false),
@@ -59,22 +59,22 @@ model_option(generate, Opts, Model) ->
               },
     {ok, Model2};
 model_option(module, Module, Model) ->
-    Model2 = Model#model{module = Module},
+    Model2 = Model#db_model{module = Module},
     {ok, Model2};
 model_option(before_save, Data, Model) ->
-    Model2 = Model#model{before_save = to_list(Data)},
+    Model2 = Model#db_model{before_save = to_list(Data)},
     {ok, Model2};
 model_option(after_create, Data, Model) ->
-    Model2 = Model#model{after_create = to_list(Data)},
+    Model2 = Model#db_model{after_create = to_list(Data)},
     {ok, Model2};
 model_option(after_update, Data, Model) ->
-    Model2 = Model#model{after_update = to_list(Data)},
+    Model2 = Model#db_model{after_update = to_list(Data)},
     {ok, Model2};
 model_option(before_delete, Data, Model) ->
-    Model2 = Model#model{before_delete = to_list(Data)},
+    Model2 = Model#db_model{before_delete = to_list(Data)},
     {ok, Model2};
 model_option(after_delete, Data, Model) ->
-    Model2 = Model#model{after_delete = to_list(Data)},
+    Model2 = Model#db_model{after_delete = to_list(Data)},
     {ok, Model2};
 model_option(_Option, _Val, _Model) ->
     false.
@@ -86,15 +86,15 @@ normalize_model(Model) ->
             ],
     tq_transform_utils:error_writer_foldl(fun(R, M) -> R(M) end, Model, Rules).
 
-set_globals(Globals, #model{fields=Fields}=Model) ->
+set_globals(Globals, #db_model{fields=Fields}=Model) ->
     {ok, TqRecordTransform} = tq_transform:g(plugin, tq_record_transform, Globals),
     Fields2 = [
                begin
-                   {ok, RF} = tq_record_transform:g(field, F#field.name, TqRecordTransform),
-                   F#field{record=RF}
+                   {ok, RF} = tq_record_transform:g(field, F#db_field.name, TqRecordTransform),
+                   F#db_field{record=RF}
                end || F <- Fields
               ],
-    Model2 = Model#model{fields=Fields2},
+    Model2 = Model#db_model{fields=Fields2},
     {ok, Model2}.
 
 build_model(Model) ->
@@ -103,16 +103,16 @@ build_model(Model) ->
 %% Fields.
 
 create_field(Name) ->
-    #field{name=Name}.
+    #db_field{name=Name}.
 
 field_option(index, IsIndex, Field) ->
-    Field2 = Field#field{is_index=IsIndex},
+    Field2 = Field#db_field{is_index=IsIndex},
     {ok, Field2};
 field_option(db_type, Type, Field) ->
-    Field2 = Field#field{type = Type},
+    Field2 = Field#db_field{type = Type},
     {ok, Field2};
 field_option(db_alias, Alias, Field) ->
-    Field2 = Field#field{alias = Alias},
+    Field2 = Field#db_field{alias = Alias},
     {ok, Field2};
 field_option(_Option, _Val, _Field) ->
     false.
@@ -124,39 +124,39 @@ normalize_field(Field) ->
             ],
     tq_transform_utils:error_writer_foldl(fun(R, F) -> R(F) end, Field, Rules).
 
-set_field(Field, #model{fields=Fields} = Model) ->
-    Model#model{fields=[Field | Fields]}.
+set_field(Field, #db_model{fields=Fields} = Model) ->
+    Model#db_model{fields=[Field | Fields]}.
 
 %% Meta.
 
-meta_clauses(#model{stores_in_db=true} = Model) ->
+meta_clauses(#db_model{stores_in_db=true} = Model) ->
     tq_sqlmodel_generator:meta_clauses(Model);
 meta_clauses(_) -> [].
 
 
 %% Model rules.
 
-stores_in_db_rule(#model{table=Table, fields=Fields}=Model) ->
-    DbFields = lists:reverse([F || F <- Fields, F#field.type =/= undefined]),
+stores_in_db_rule(#db_model{table=Table, fields=Fields}=Model) ->
+    DbFields = lists:reverse([F || F <- Fields, F#db_field.type =/= undefined]),
     case {DbFields =/= [], Table =/= undefined} of
         {true, true} ->
-            Model2 = Model#model{fields=DbFields, stores_in_db=true},
+            Model2 = Model#db_model{fields=DbFields, stores_in_db=true},
             {ok, Model2};
         {false, true} ->
             {error, "No db fields defined"};
         {true, false} ->
             {error, "Table name required"};
         {false, false} ->
-            Model2 = Model#model{fields=[], stores_in_db = false},
+            Model2 = Model#db_model{fields=[], stores_in_db = false},
             {ok, Model2}
     end.
 
-table_quoted_rule(#model{stores_in_db=true, table=Table}=Model) ->
+table_quoted_rule(#db_model{stores_in_db=true, table=Table}=Model) ->
     case is_quated(Table) of
         true ->
             {ok, Model};
         false ->
-            Model2 = Model#model{table=quote(Table)},
+            Model2 = Model#db_model{table=quote(Table)},
             {ok, Model2}
     end;
 table_quoted_rule(Model) ->
@@ -165,19 +165,19 @@ table_quoted_rule(Model) ->
 
 %% Field rules.
 
-default_alias_name_rule(#field{name=Name, alias=undefined}=Field) ->
-    Field2 = Field#field{alias=list_to_binary(atom_to_list(Name))},
+default_alias_name_rule(#db_field{name=Name, alias=undefined}=Field) ->
+    Field2 = Field#db_field{alias=list_to_binary(atom_to_list(Name))},
     {ok, Field2};
 default_alias_name_rule(Field) ->
     {ok, Field}.
 
 
-alias_quoted_rule(#field{alias=Alias}=Field) ->
+alias_quoted_rule(#db_field{alias=Alias}=Field) ->
     case is_quated(Alias) of
         true ->
             {ok, Field};
         false ->
-            Field2 = Field#field{alias=quote(Alias)},
+            Field2 = Field#db_field{alias=quote(Alias)},
             {ok, Field2}
     end.
 

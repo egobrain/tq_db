@@ -1,4 +1,4 @@
--record(model, {
+-record(db_model, {
           module,
           fields = [],
           table,
@@ -20,7 +20,7 @@
           after_delete = []
          }).
 
--record(field, {
+-record(db_field, {
           name,
           type,
           alias,
