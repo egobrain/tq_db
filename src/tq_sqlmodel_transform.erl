@@ -44,9 +44,9 @@ parse_transform(Ast, Options) ->
 create_model(Module) ->
     #db_model{module=Module}.
 
-model_option(init, NewInitFuns,  #db_model{init_funs=InitFuns}=Model) ->
+model_option(from_db, NewInitFuns,  #db_model{from_db_funs=InitFuns}=Model) ->
     Model2 = Model#db_model{
-               init_funs = InitFuns ++ to_list(NewInitFuns)
+               from_db_funs = InitFuns ++ to_list(NewInitFuns)
               },
     {ok, Model2};
 model_option(table, Table, Model) ->
@@ -116,9 +116,9 @@ field_option(db_type, Type, Field) ->
 field_option(db_alias, Alias, Field) ->
     Field2 = Field#db_field{alias = Alias},
     {ok, Field2};
-field_option(init, NewInitFuns, #db_field{init_funs=InitFuns}=Field) ->
+field_option(from_db, NewInitFuns, #db_field{from_db_funs=InitFuns}=Field) ->
     Field2 = Field#db_field{
-               init_funs = InitFuns ++ to_list(NewInitFuns)
+               from_db_funs = InitFuns ++ to_list(NewInitFuns)
               },
     {ok, Field2};
 field_option(_Option, _Val, _Field) ->

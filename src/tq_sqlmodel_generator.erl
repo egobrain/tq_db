@@ -163,9 +163,9 @@ build_internal_functions(Model) ->
     Exports = ?export_funs(Funs),
     {Exports, Funs}.
 
-constructor1_function(#db_model{init_funs=InitFuns, module=Module}) ->
+constructor1_function(#db_model{from_db_funs=InitFuns, module=Module}) ->
     SetIsNotNew = ?record(?var('Model'), Module, [?field('$is_new$', ?atom(false))]),
-    FinalForm = apply_init_hooks(InitFuns, SetIsNotNew),
+    FinalForm = apply_from_db_hooks(InitFuns, SetIsNotNew),
     ?function(constructor,
               [?clause([?var('Fields')], none,
                        [?match(?var('Constructors'),
@@ -185,7 +185,7 @@ constructor1_function(#db_model{init_funs=InitFuns, module=Module}) ->
 field_constructor_function(#db_model{fields=Fields, module=Module}) ->
     DefaultClasuse = ?clause([?var('Fun')], [?nif_is_function(?var('Fun'))], [?var('Fun')]),
     SetterAst = fun(F) -> ?apply(?prefix_set(F#db_field.name),
-                                 [apply_init_hooks(F#db_field.init_funs, ?var('Val')),
+                                 [apply_from_db_hooks(F#db_field.from_db_funs, ?var('Val')),
                                   ?var('Model')])
                 end,
     ?function(field_constructor,
@@ -272,9 +272,9 @@ apply_hooks(Funs, Var) ->
     ?apply(tq_sqlmodel_runtime, success_foldl,
            [Var, ?list([lambda_function(F) || F <- Funs])]).
 
-apply_init_hooks([], Var) ->
+apply_from_db_hooks([], Var) ->
     Var;
-apply_init_hooks([Fun], Var) ->
+apply_from_db_hooks([Fun], Var) ->
     function_call(Fun, [Var]);
-apply_init_hooks([Fun|Rest], Var) ->
-    apply_init_hooks(Rest, function_call(Fun, [Var])).
+apply_from_db_hooks([Fun|Rest], Var) ->
+    apply_from_db_hooks(Rest, function_call(Fun, [Var])).

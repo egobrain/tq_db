@@ -12,20 +12,20 @@
          {default, 1}
         ]}).
 
--field({init_field,
+-field({from_db_field,
         [
          required,
          {type, integer},
          {db_type, integer},
          record, get, set,
          {default, 1},
-         {init, [field_init1,
+         {from_db, [field_init1,
                  field_init2]}
         ]}).
 
 -model([
         {table, <<"test">>},
-        {init, [init1,
+        {from_db, [init1,
                 init2]}
        ]).
 
@@ -53,7 +53,7 @@ field_init2(FieldVal) ->
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
-init_test_() ->
+from_db_test_() ->
     C = fun(V) ->
                 {ok, Model} = from_proplist([{counter, V}]),
                 Model#?MODULE{'$is_new$'=false}
@@ -61,11 +61,11 @@ init_test_() ->
     [fun() -> ?assertEqual(C(30), (constructor([]))([])) end,
      fun() -> ?assertEqual(C(150), (constructor([counter]))([5])) end].
 
-init_field_test_() ->
+from_db_field_test_() ->
     G = fun(M) ->
-                M:init_field()
+                M:from_db_field()
         end,
     [fun() -> ?assertEqual(1, G((constructor([]))([]))) end,
-     fun() -> ?assertEqual(150, G((constructor([init_field]))([5]))) end].
+     fun() -> ?assertEqual(150, G((constructor([from_db_field]))([5]))) end].
 
 -endif.
