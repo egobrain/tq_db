@@ -27,5 +27,6 @@
           is_index = false,
           record,
 
-          from_db_funs = [] :: atom() | {atom(), atom()} | {atom(), list()} | {atom(), atom(), list()}
+          from_db_funs = [] :: atom() | {atom(), atom()} | {atom(), list()} | {atom(), atom(), list()},
+          to_db_funs = [] :: atom() | {atom(), atom()} | {atom(), list()} | {atom(), atom(), list()}
          }).

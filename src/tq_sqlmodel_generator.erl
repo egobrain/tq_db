@@ -73,8 +73,8 @@ build_get(_Model) ->
 build_save(#db_model{save=true,
                   before_save=BeforeSaveHooks,
                   after_create=AfterCreateHooks,
-                  after_update=AfterUpdateHooks}) ->
-    BeforeAst = apply_hooks(BeforeSaveHooks ++ [{tq_sqlmodel_runtime, save}], ?var('Model')),
+                  after_update=AfterUpdateHooks} = Model) ->
+    BeforeAst = apply_success_hooks(BeforeSaveHooks ++ ['$save_hook'], ?var('Model')),
 
     BodyAst =
         case AfterCreateHooks =:= [] andalso AfterUpdateHooks =:= [] of
@@ -86,16 +86,30 @@ build_save(#db_model{save=true,
                         [?clause([?ok(?var('ResModel'))], none,
                                  [?cases(?var('IsNew'),
                                          [?clause([?atom(true)], none,
-                                                  [apply_hooks(AfterCreateHooks, ?var('ResModel'))]),
+                                                  [apply_success_hooks(AfterCreateHooks, ?var('ResModel'))]),
                                           ?clause([?atom(false)], none,
-                                                  [apply_hooks(AfterUpdateHooks, ?var('ResModel'))])])]),
+                                                  [apply_success_hooks(AfterUpdateHooks, ?var('ResModel'))])])]),
                          ?clause([?error(?var('Reason'))], none,
                                  [?error(?var('Reason'))])
                         ])]
         end,
     SaveFun = ?function(save, [?clause([?var('Model')], none, BodyAst)]),
-    Export = ?export_fun(SaveFun),
-    {[Export], [SaveFun]};
+    SaveHook= ?function('$save_hook',
+                         [?clause([?var('Model')], [],
+                                  [?apply(tq_sqlmodel_runtime, save,
+                                          [?apply('$db_changed_fields', [?var('Model')]),
+                                           ?var('Model')])])]),
+    ExternalFuns =
+        [
+         SaveFun
+        ],
+    InternalFuns =
+        [
+         SaveHook,
+         db_changed_fields_function(Model)
+        ],
+    Exports = ?export_funs(ExternalFuns),
+    {Exports, ExternalFuns ++ InternalFuns};
 build_save(_Model) ->
     {[], []}.
 
@@ -165,7 +179,7 @@ build_internal_functions(Model) ->
 
 constructor1_function(#db_model{from_db_funs=InitFuns, module=Module}) ->
     SetIsNotNew = ?record(?var('Model'), Module, [?field('$is_new$', ?atom(false))]),
-    FinalForm = apply_from_db_hooks(InitFuns, SetIsNotNew),
+    FinalForm = apply_hooks(InitFuns, SetIsNotNew),
     ?function(constructor,
               [?clause([?var('Fields')], none,
                        [?match(?var('Constructors'),
@@ -185,7 +199,7 @@ constructor1_function(#db_model{from_db_funs=InitFuns, module=Module}) ->
 field_constructor_function(#db_model{fields=Fields, module=Module}) ->
     DefaultClasuse = ?clause([?var('Fun')], [?nif_is_function(?var('Fun'))], [?var('Fun')]),
     SetterAst = fun(F) -> ?apply(?prefix_set(F#db_field.name),
-                                 [apply_from_db_hooks(F#db_field.from_db_funs, ?var('Val')),
+                                 [apply_hooks(F#db_field.from_db_funs, ?var('Val')),
                                   ?var('Model')])
                 end,
     ?function(field_constructor,
@@ -201,6 +215,25 @@ field_constructor_function(#db_model{fields=Fields, module=Module}) ->
                   F <- Fields,
                   F#db_field.record#record_field.setter =/= false
               ] ++ [DefaultClasuse]).
+
+db_changed_fields_function(#db_model{module=Module, fields=Fields}) ->
+    ListAst = ?list([?tuple([?atom(F#db_field.name),
+                             apply_hooks(
+                                F#db_field.to_db_funs,
+                                ?access(?var('Model'), Module, F#db_field.name)),
+                             ?access(?var('Model'), Module, ?changed_suffix(F#db_field.name))
+                            ])
+                     || F <- Fields,
+                        F#db_field.record#record_field.stores_in_record,
+                        F#db_field.record#record_field.setter,
+                        F#db_field.record#record_field.mode#access_mode.sw]),
+    ?function('$db_changed_fields',
+              [?clause([?var('Model')], none,
+                       [?list_comp(?tuple([?var('Name'), ?var('Val')]),
+                                   [?generator(?tuple([?var('Name'), ?var('Val'), ?var('Changed')]),
+                                               ListAst),
+                                    ?var('Changed')]
+                                  )])]).
 
 
 meta_clauses(#db_model{table=Table, fields=Fields}) ->
@@ -265,16 +298,16 @@ atom_to_quated_string(Atom) ->
     lists:flatten("\""++atom_to_list(Atom)++"\"").
 
 apply_hooks([], Var) ->
-    ?ok(Var);
+    Var;
 apply_hooks([Fun], Var) ->
     function_call(Fun, [Var]);
-apply_hooks(Funs, Var) ->
+apply_hooks([Fun|Rest], Var) ->
+    apply_hooks(Rest, function_call(Fun, [Var])).
+
+apply_success_hooks([], Var) ->
+    ?ok(Var);
+apply_success_hooks([Fun], Var) ->
+    function_call(Fun, [Var]);
+apply_success_hooks(Funs, Var) ->
     ?apply(tq_sqlmodel_runtime, success_foldl,
            [Var, ?list([lambda_function(F) || F <- Funs])]).
-
-apply_from_db_hooks([], Var) ->
-    Var;
-apply_from_db_hooks([Fun], Var) ->
-    function_call(Fun, [Var]);
-apply_from_db_hooks([Fun|Rest], Var) ->
-    apply_from_db_hooks(Rest, function_call(Fun, [Var])).

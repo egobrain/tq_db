@@ -1,11 +1,10 @@
 -module(tq_sqlmodel_runtime).
 
--export([save/1,
+-export([save/2,
          success_foldl/2
         ]).
 
-save(Model) ->
-    Changed = Model:get_changed_fields(),
+save(Changed, Model) ->
     case {Model:is_new(), Changed} of
         {true, []} ->
             {error,not_changed};

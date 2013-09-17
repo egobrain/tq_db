@@ -57,7 +57,7 @@ f() ->
 before_after_test() ->
     meck:new(tq_sqlmodel_runtime, [unstick, passthrough]),
     meck:expect(tq_sqlmodel_runtime, 'save',
-                fun(M) ->
+                fun(_, M) ->
                         {ok, M:set_tmp({save, M:tmp()})}
                 end),
     {ok, Model} = ?MODULE:from_proplist([{tmp, data}]),

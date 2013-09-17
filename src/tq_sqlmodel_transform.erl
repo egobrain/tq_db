@@ -121,6 +121,11 @@ field_option(from_db, NewInitFuns, #db_field{from_db_funs=InitFuns}=Field) ->
                from_db_funs = InitFuns ++ to_list(NewInitFuns)
               },
     {ok, Field2};
+field_option(to_db, NewInitFuns, #db_field{to_db_funs=InitFuns}=Field) ->
+    Field2 = Field#db_field{
+               to_db_funs = InitFuns ++ to_list(NewInitFuns)
+              },
+    {ok, Field2};
 field_option(_Option, _Val, _Field) ->
     false.
 

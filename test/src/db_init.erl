@@ -9,6 +9,7 @@
          {type, integer},
          {db_type, integer},
          record, get, set,
+         {to_db, to_db},
          {default, 1}
         ]}).
 
@@ -25,6 +26,7 @@
 
 -model([
         {table, <<"test">>},
+        {generate, [get, save, delete, find]},
         {from_db, [init1,
                 init2]}
        ]).
@@ -50,6 +52,9 @@ field_init1(FieldVal) ->
 field_init2(FieldVal) ->
     FieldVal*10.
 
+to_db(Value) ->
+    {to_db, Value}.
+
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
@@ -67,5 +72,15 @@ from_db_field_test_() ->
         end,
     [fun() -> ?assertEqual(1, G((constructor([]))([]))) end,
      fun() -> ?assertEqual(150, G((constructor([from_db_field]))([5]))) end].
+
+to_db_test() ->
+    meck:new(tq_sqlmodel_runtime, [unstick, passthrough]),
+    meck:expect(tq_sqlmodel_runtime, 'save',
+                fun(Changed, _M) ->
+                        lists:keyfind(counter, 1, Changed)
+                end),
+    {ok, Model} = ?MODULE:from_proplist([{counter, 100}]),
+    ?assertEqual({counter, {to_db, 100}}, Model:save()),
+    meck:unload(tq_sqlmodel_runtime).
 
 -endif.
