@@ -14,8 +14,10 @@
 
 -module(tq_sqlmodel_generator).
 
--include("include/db.hrl").
 -include("include/ast_helpers.hrl").
+
+-include("deps/tq_transform/include/record_model.hrl").
+-include("include/db.hrl").
 
 -export([build_model/1, meta_clauses/1]).
 
@@ -166,12 +168,13 @@ meta_clauses(#model{table=Table, fields=Fields}) ->
                                                  || F <- Fields])])],
     DbRFieldsClaues = ?clause([?abstract({db_fields, r})], none,
                               [?list([?atom(F#field.name)
-                                      || F <- Fields, F#field.mode#access_mode.sr])]),
+                                      || F <- Fields,
+                                         F#field.record#record_field.mode#access_mode.sr])]),
     DbWFieldsClaues = ?clause([?abstract({db_fields, w})], none,
                               [?list([?atom(F#field.name)
-                                      || F <- Fields, F#field.mode#access_mode.sw])]),
+                                      || F <- Fields, F#field.record#record_field.mode#access_mode.sw])]),
     [$, | SqlRFields] = lists:flatten([[$,, atom_to_quated_string(F#field.name)]
-                                       || F <- Fields, F#field.mode#access_mode.sr]),
+                                       || F <- Fields, F#field.record#record_field.mode#access_mode.sr]),
     RSqlFieldsClause = ?clause([?abstract({sql, {db_fields, r}})], none,
                                [?string(SqlRFields)]),
 

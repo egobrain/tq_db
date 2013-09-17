@@ -1,10 +1,3 @@
--record(access_mode,{
-          r = true :: boolean(),
-          sr = true :: boolean(),
-          w = true :: boolean(),
-          sw = true :: boolean()
-         }).
-
 -record(model, {
           module,
           fields = [],
@@ -32,5 +25,5 @@
           type,
           alias,
           is_index = false,
-          mode = #access_mode{}
+          record
          }).

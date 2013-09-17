@@ -12,6 +12,7 @@
 -behavior(tq_transform_plugin).
 
 -include("include/db.hrl").
+-include("deps/tq_transform/include/record_model.hrl").
 
 -export([parse_transform/2]).
 
@@ -85,8 +86,16 @@ normalize_model(Model) ->
             ],
     tq_transform_utils:error_writer_foldl(fun(R, M) -> R(M) end, Model, Rules).
 
-set_globals(_Globals, Model) ->
-    {ok, Model}.
+set_globals(Globals, #model{fields=Fields}=Model) ->
+    {ok, TqRecordTransform} = tq_transform:g(plugin, tq_record_transform, Globals),
+    Fields2 = [
+               begin
+                   {ok, RF} = tq_record_transform:g(field, F#field.name, TqRecordTransform),
+                   F#field{record=RF}
+               end || F <- Fields
+              ],
+    Model2 = Model#model{fields=Fields2},
+    {ok, Model2}.
 
 build_model(Model) ->
     tq_sqlmodel_generator:build_model(Model).
@@ -104,9 +113,6 @@ field_option(db_type, Type, Field) ->
     {ok, Field2};
 field_option(db_alias, Alias, Field) ->
     Field2 = Field#field{alias = Alias},
-    {ok, Field2};
-field_option(mode, Mode, Field) ->
-    Field2 = Field#field{mode = mode_to_acl(Mode)},
     {ok, Field2};
 field_option(_Option, _Val, _Field) ->
     false.
@@ -176,15 +182,6 @@ alias_quoted_rule(#field{alias=Alias}=Field) ->
     end.
 
 %% Internal functions.
-
-mode_to_acl(r)    -> #access_mode{r=true,  sr=true,  w=false, sw=false};
-mode_to_acl(w)    -> #access_mode{r=false, sr=false, w=true,  sw=true};
-mode_to_acl(rw)   -> #access_mode{r=true,  sr=true,  w=true,  sw=true};
-mode_to_acl(sr)   -> #access_mode{r=false, sr=true,  w=false, sw=false};
-mode_to_acl(sw)   -> #access_mode{r=false, sr=false, w=false, sw=true};
-mode_to_acl(srsw) -> #access_mode{r=false, sr=true,  w=false, sw=true};
-mode_to_acl(rsw)  -> #access_mode{r=true,  sr=true,  w=false, sw=true};
-mode_to_acl(srw)  -> #access_mode{r=false, sr=true,  w=true,  sw=true}.
 
 quote(A) ->
     <<"\"", A/binary, "\"">>.
