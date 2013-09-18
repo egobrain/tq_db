@@ -16,7 +16,7 @@
 
 -include("include/ast_helpers.hrl").
 
--include("deps/tq_transform/include/record_model.hrl").
+-include_lib("tq_transform/include/record_model.hrl").
 -include("include/db_model.hrl").
 
 -export([build_model/1, meta_clauses/1]).
