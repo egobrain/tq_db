@@ -49,8 +49,7 @@ handle_call({'query', Sql, Args, Constructor}, _From, #state{conn=Conn, driver=D
                {ok, Count, Rows} ->
                    {ok, Count, [Constructor(tuple_to_list(R)) || R <- Rows]};
                {error, Reason} ->
-                   io:format("~p", [Reason]),
-                   {error, db_error}
+                   {error, Reason}
            end,
     {reply, Resp, State}.
 
