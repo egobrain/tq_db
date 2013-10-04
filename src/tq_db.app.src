@@ -10,7 +10,7 @@
   {mod, {tq_db_app, []}},
   {env, [
    {pools,
-    [{pool1, {sql, tq_postgres_driver},
+    [{pool1, tq_postgres_driver,
    [{size, 10},
     {max_overflow, 20}],
    [{hostname,"localhost"},
