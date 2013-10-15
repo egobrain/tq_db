@@ -2,6 +2,8 @@
 
 -behavior(tq_sql).
 
+-include_lib("epgsql/include/pgsql.hrl").
+
 -export([connect/1, query/3]).
 
 connect(Args) ->
@@ -28,11 +30,22 @@ connect(Args) ->
                 {ok, Count, _Columns, Rows} ->
                     {ok, Count, Rows};
                 {error, Reason} ->
-                    {error, Reason}
+                    Reason2 = transform_error(Reason),
+                    {error, Reason2}
             end;
         {error, _} = Err ->
             Err
     end.
+
+transform_error(#error{code = <<"23505">>}) ->
+    not_unique;
+transform_error(Error) ->
+    {db_error,
+     [
+      {code, Error#error.code},
+      {message, Error#error.message},
+      {extra, Error#error.extra}
+     ]}.
 
 escape_args(Args) ->
     tq_transform_utils:error_writer_map(fun escape_arg/1, Args).
