@@ -171,11 +171,25 @@ build_delete(_Model) ->
 
 build_internal_functions(Model) ->
     Funs = [
+            field_to_db_function(Model),
+            field_from_db_function(Model),
             field_constructor_function(Model),
             constructor1_function(Model)
            ],
     Exports = ?export_funs(Funs),
     {Exports, Funs}.
+
+field_to_db_function(Model) ->
+    ?function(field_to_db,
+              [?clause([?atom(F#db_field.name), ?var('Val')], none,
+                       [apply_hooks(F#db_field.to_db_funs, ?var('Val'))])
+               || F <- Model#db_model.fields]).
+
+field_from_db_function(Model) ->
+    ?function(field_from_db,
+              [?clause([?atom(F#db_field.name), ?var('Val')], none,
+                       [apply_hooks(F#db_field.from_db_funs, ?var('Val'))])
+               || F <- Model#db_model.fields]).
 
 constructor1_function(#db_model{from_db_funs=InitFuns, module=Module}) ->
     SetIsNotNew = ?record(?var('Model'), Module, [?field('$is_new$', ?atom(false))]),
