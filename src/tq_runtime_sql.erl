@@ -54,8 +54,8 @@ parse(<<$$, Rest/binary>>, Opts, {Sql, Types, Fields}) ->
                end);
 parse(<<$~, Rest/binary>>, {Model, [A | Args]}, {Sql, Types, Fields}) ->
     scan_type(Rest,
-              fun(Type, Rest2) ->
-                      parse(Rest2, {Model, Args}, {<<Sql/binary, "~s">>, [{Type, A} | Types], Fields})
+              fun(TypeWrapper, Rest2) ->
+                      parse(Rest2, {Model, Args}, {<<Sql/binary, "~s">>, [TypeWrapper(A) | Types], Fields})
               end);
 parse(<<>>, _Opts, {Sql, Types, Fields}) ->
     {ok, {Sql,
@@ -123,12 +123,21 @@ scan_type(Data, Fun) ->
                         fun(FieldStr, Rest2) ->
                                 Model = binary_to_atom(ModelStr),
                                 Field = binary_to_atom(FieldStr),
-                                Fun(Model:'$meta'({db_type, Field}), Rest2)
+                                TypeWrapper =
+                                    fun(Val) ->
+                                            {Model:'$meta'({db_type, Field}),
+                                             Model:field_to_db(Field, Val)}
+                                    end,
+                                Fun(TypeWrapper, Rest2)
                         end);
              (<<>>, _Rest) ->
                   {error, "model field must be specified"};
              (TypeStr, Rest) ->
-                  Fun(binary_to_atom(TypeStr), Rest)
+                  TypeWrapper =
+                      fun(Val) ->
+                              {binary_to_atom(TypeStr), Val}
+                      end,
+                  Fun(TypeWrapper, Rest)
           end).
 
 token(Data, Fun) ->
