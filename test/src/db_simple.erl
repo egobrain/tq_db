@@ -15,7 +15,7 @@
                {db_alias, <<"name">>}]}).
 
 -field({tmp, [required,
-              {type_constructor, any_type_constructor},
+              {from_ext, any},
               {type, any},
               {db_type, any}
              ]}).
@@ -30,7 +30,7 @@
         {after_delete, after_delete}
        ]).
 
-any_type_constructor(A) -> A.
+any(A) -> A.
 
 before_save(Model) ->
     {ok, Model:set_tmp({before, Model:tmp()})}.
