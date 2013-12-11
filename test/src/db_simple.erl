@@ -1,8 +1,6 @@
 -module(db_simple).
 -compile({parse_transform, tq_sqlmodel_transform}).
 
--export([f/0]).
-
 -field({index, [index,
                 required,
                 {type, integer},
@@ -42,14 +40,6 @@ before_delete(_Model) ->
     ok.
 after_delete(_Model) ->
     ok.
-
-f() ->
-    A = 3,
-    tq_sql:q(db_simple,
-             " SELECT @index, @name($db_simple.index), @* FROM $db_simple"
-             " WHERE $db_simple.index = #db_simple.index{A} AND $db_simple.name LIKE #{\"test\"}").
-
-
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
