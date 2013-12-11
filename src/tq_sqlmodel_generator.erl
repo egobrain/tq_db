@@ -40,11 +40,16 @@ build_model(Model) ->
                         {[IB | IBlock], [FB | FBlock]}
                 end, {[], []}, Builders).
 
-build_get(#db_model{get=true, module=Module, fields=Fields}) ->
+build_get(#db_model{
+             get=true,
+             module=Module,
+             fields=Fields,
+             funs=#funs{get=GetName}
+            }) ->
     IndexFields = [F || F <- Fields, F#db_field.is_index =:= true],
     Vars = ["Var" ++ integer_to_list(I) || I <- lists:seq(1, length(IndexFields))],
 
-    GetFun = ?function(get,
+    GetFun = ?function(GetName,
                        [?clause([?var(V) || V <- Vars], none,
                                 [
                                  begin
@@ -70,10 +75,13 @@ build_get(#db_model{get=true, module=Module, fields=Fields}) ->
 build_get(_Model) ->
     {[], []}.
 
-build_save(#db_model{save=true,
-                  before_save=BeforeSaveHooks,
-                  after_create=AfterCreateHooks,
-                  after_update=AfterUpdateHooks} = Model) ->
+build_save(#db_model{
+              save=true,
+              before_save=BeforeSaveHooks,
+              after_create=AfterCreateHooks,
+              after_update=AfterUpdateHooks,
+              funs=#funs{save=SaveName}
+             } = Model) ->
     BeforeAst = apply_success_hooks(BeforeSaveHooks ++ ['$save_hook'], ?var('Model')),
 
     BodyAst =
@@ -93,7 +101,7 @@ build_save(#db_model{save=true,
                                  [?error(?var('Reason'))])
                         ])]
         end,
-    SaveFun = ?function(save, [?clause([?var('Model')], none, BodyAst)]),
+    SaveFun = ?function(SaveName, [?clause([?var('Model')], none, BodyAst)]),
     SaveHook= ?function('$save_hook',
                          [?clause([?var('Model')], [],
                                   [?apply(tq_sqlmodel_runtime, save,
@@ -113,9 +121,13 @@ build_save(#db_model{save=true,
 build_save(_Model) ->
     {[], []}.
 
-build_find(#db_model{module=Module, find=true}) ->
+build_find(#db_model{
+              find=true,
+              module=Module,
+              funs=#funs{find=FindName}
+             }) ->
     Sql = "SELECT @* FROM $" ++ atom_to_list(Module) ++ " ",
-    FindFun = ?function(find,
+    FindFun = ?function(FindName,
                         [?clause([?var('Where'), ?var('Args')], none,
                                  [?apply(tq_runtime_sql, model_query,
                                          [?atom(db), ?atom(Module),
@@ -128,7 +140,14 @@ build_find(#db_model{module=Module, find=true}) ->
 build_find(_Model) ->
     {[], []}.
 
-build_delete(#db_model{delete=true, module=Module, fields=Fields, before_delete=BeforeHooks, after_delete=AfterHooks}) ->
+build_delete(#db_model{
+                delete=true,
+                module=Module,
+                fields=Fields,
+                before_delete=BeforeHooks,
+                after_delete=AfterHooks,
+                funs=#funs{delete=DeleteName}
+               }) ->
     IndexFields = [F || F <- Fields, F#db_field.is_index =:= true],
     Vars = ["Var" ++ integer_to_list(I) || I <- lists:seq(1, length(IndexFields))],
     IndexFields2 = lists:zip(Vars, IndexFields),
@@ -163,9 +182,9 @@ build_delete(#db_model{delete=true, module=Module, fields=Fields, before_delete=
                                               ++ [?func(DeleteClause)])])]
                               )]
               end,
-    GetFun = ?function(delete, BodyAst),
-    Export = ?export_fun(GetFun),
-    {[Export], [GetFun]};
+    DeleteFun = ?function(DeleteName, BodyAst),
+    Export = ?export_fun(DeleteFun),
+    {[Export], [DeleteFun]};
 build_delete(_Model) ->
     {[], []}.
 

@@ -1,3 +1,10 @@
+-record(funs, {
+          save = save,
+          get = get,
+          find = find,
+          delete = delete
+         }).
+
 -record(db_model, {
           module,
           fields = [],
@@ -17,7 +24,11 @@
           after_create = [],
           after_update = [],
           before_delete = [],
-          after_delete = []
+          after_delete = [],
+
+          %% Aliases
+
+          funs = #funs{}
          }).
 
 -record(db_field, {

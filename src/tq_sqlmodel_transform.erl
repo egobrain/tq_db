@@ -78,6 +78,10 @@ model_option(before_delete, Data, Model) ->
 model_option(after_delete, Data, Model) ->
     Model2 = Model#db_model{after_delete = to_list(Data)},
     {ok, Model2};
+model_option(rename, Aliases, Model) ->
+    Funs = fill_names(Aliases, Model#db_model.funs),
+    Model2 = Model#db_model{funs = Funs},
+    {ok, Model2};
 model_option(_Option, _Val, _Model) ->
     false.
 
@@ -174,6 +178,20 @@ table_quoted_rule(#db_model{stores_in_db=true, table=Table}=Model) ->
 table_quoted_rule(Model) ->
     {ok, Model}.
 
+%% Function names
+
+fill_names(List, FunNames) ->
+    Fun =
+        fun({Name, Value}, Fns) ->
+                case Name of
+                    get -> Fns#funs{get = Value};
+                    save -> Fns#funs{save = Value};
+                    find -> Fns#funs{find = Value};
+                    delete -> Fns#funs{delete = Value};
+                    _ -> Fns
+                end
+        end,
+    lists:foldl(Fun, FunNames, List).
 
 %% Field rules.
 
