@@ -27,6 +27,11 @@
 
 
 build_model(Model) ->
+    PrepareFuns =
+        [
+         fun hooks_args_to_abstract/1
+        ],
+    PreparedModel = prepare_model(PrepareFuns, Model),
     Builders = [
                 fun build_get/1,
                 fun build_save/1,
@@ -36,9 +41,33 @@ build_model(Model) ->
                 fun build_internal_functions/1
                ],
     lists:foldl(fun(F, {IBlock, FBlock}) ->
-                        {IB, FB} = F(Model),
+                        {IB, FB} = F(PreparedModel),
                         {[IB | IBlock], [FB | FBlock]}
                 end, {[], []}, Builders).
+
+%% === Prepare =================================================================
+
+prepare_model(PrepareFuns, Model) ->
+    lists:foldl(fun(F, M) -> F(M) end, Model, PrepareFuns).
+
+hooks_args_to_abstract(Model) ->
+    Indexes =
+        [
+         #db_model.from_db_funs,
+         #db_model.before_save,
+         #db_model.after_save,
+         #db_model.before_delete,
+         #db_model.after_delete
+        ],
+    Fun =
+        fun(E, M) ->
+                Hooks = element(E, M),
+                NewHooks = [function_args_to_abstract(H) || H <- Hooks],
+                setelement(E, M, NewHooks)
+        end,
+    lists:foldl(Fun, Model, Indexes).
+
+%% === Build ===================================================================
 
 build_get(#db_model{
              get=true,
@@ -78,25 +107,18 @@ build_get(_Model) ->
 build_save(#db_model{
               save=true,
               before_save=BeforeSaveHooks,
-              after_create=AfterCreateHooks,
-              after_update=AfterUpdateHooks,
+              after_save=AfterSaveHooks,
               funs=#funs{save=SaveName}
              } = Model) ->
     BeforeAst = apply_success_hooks(BeforeSaveHooks ++ ['$save_hook'], ?var('Model')),
-
     BodyAst =
-        case AfterCreateHooks =:= [] andalso AfterUpdateHooks =:= [] of
-            true ->
+        case append_functions_args(AfterSaveHooks, [?var('Model')]) of
+            [] ->
                 [BeforeAst];
-            false ->
-                [?match(?var('IsNew'), ?apply_(?var('Model'), is_new, [])),
-                 ?cases(BeforeAst,
+            AfterSaveHooks2 ->
+                [?cases(BeforeAst,
                         [?clause([?ok(?var('ResModel'))], none,
-                                 [?cases(?var('IsNew'),
-                                         [?clause([?atom(true)], none,
-                                                  [apply_success_hooks(AfterCreateHooks, ?var('ResModel'))]),
-                                          ?clause([?atom(false)], none,
-                                                  [apply_success_hooks(AfterUpdateHooks, ?var('ResModel'))])])]),
+                                 [apply_success_hooks(AfterSaveHooks2, ?var('ResModel'))]),
                          ?clause([?error(?var('Reason'))], none,
                                  [?error(?var('Reason'))])
                         ])]
@@ -304,24 +326,20 @@ meta_clauses(#db_model{table=Table, fields=Fields}) ->
 
 %% Internal helpers.
 function_call({Mod, Fun, FunArgs}, Args) ->
-    FunArgs2 = [erl_syntax:abstract(A) || A <- FunArgs],
-    ?apply(Mod, Fun, FunArgs2++Args);
+    ?apply(Mod, Fun, FunArgs++Args);
 function_call({Fun, FunArgs}, Args) when is_list(FunArgs) ->
-    FunArgs2 = [erl_syntax:abstract(A) || A <- FunArgs],
-    ?apply(Fun, FunArgs2++Args);
+    ?apply(Fun, FunArgs++Args);
 function_call({Mod, Fun}, Args) ->
     ?apply(Mod, Fun, Args);
 function_call(Fun, Args) ->
     ?apply(Fun, Args).
 
 lambda_function({Mod, Fun, FunArgs}) ->
-    FunArgs2 = [erl_syntax:abstract(A) || A <- FunArgs],
     ?func([?clause([?var('M')], none,
-                   [?apply(Mod, Fun, FunArgs2 ++ [?var('M')])])]);
+                   [?apply(Mod, Fun, FunArgs ++ [?var('M')])])]);
 lambda_function({Fun, FunArgs}) when is_list(FunArgs) ->
-    FunArgs2 = [erl_syntax:abstract(A) || A <- FunArgs],
     ?func([?clause([?var('M')], none,
-                   [?apply(Fun, FunArgs2 ++ [?var('M')])])]);
+                   [?apply(Fun, FunArgs ++ [?var('M')])])]);
 lambda_function({Mod, Fun}) ->
     ?func(Mod, Fun, 1);
 lambda_function(Fun) ->
@@ -344,3 +362,28 @@ apply_success_hooks([Fun], Var) ->
 apply_success_hooks(Funs, Var) ->
     ?apply(tq_sqlmodel_runtime, success_foldl,
            [Var, ?list([lambda_function(F) || F <- Funs])]).
+
+list_to_abstract(List) ->
+    [erl_syntax:abstract(A) || A <- List].
+
+function_args_to_abstract({Mod, Fun, FunArgs}) ->
+    {Mod, Fun, list_to_abstract(FunArgs)};
+function_args_to_abstract({Fun, FunArgs}) when is_list(FunArgs) ->
+    {Fun, list_to_abstract(FunArgs)};
+function_args_to_abstract({Mod, Fun}) ->
+    {Mod, Fun};
+function_args_to_abstract(Fun) ->
+    Fun.
+
+
+append_functions_args(Funs, Args) ->
+    [append_function_args(F, Args) || F <- Funs].
+
+append_function_args({Mod, Fun, FunArgs}, Args) ->
+    {Mod, Fun, FunArgs++Args};
+append_function_args({Fun, FunArgs}, Args) when is_list(FunArgs) ->
+    {Fun, FunArgs++Args};
+append_function_args({Mod, Fun}, Args) ->
+    {Mod, Fun, Args};
+append_function_args(Fun, Args) ->
+    {Fun, Args}.

@@ -21,8 +21,8 @@
           from_db_funs = [] :: atom() | {atom(), atom()} | {atom(), list()} | {atom(), atom(), list()},
 
           before_save = [],
-          after_create = [],
-          after_update = [],
+          after_save = [],
+
           before_delete = [],
           after_delete = [],
 

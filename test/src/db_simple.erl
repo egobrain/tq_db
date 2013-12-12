@@ -22,8 +22,7 @@
         {generate, [get, save, find, delete]},
 
         {before_save, before_save},
-        {after_create, {after_save, [create]}},
-        {after_update, {after_save, [update]}},
+        {after_save, after_save},
         {before_delete, before_delete},
         {after_delete, after_delete}
        ]).
@@ -33,8 +32,8 @@ any(A) -> A.
 before_save(Model) ->
     {ok, Model:set_tmp({before, Model:tmp()})}.
 
-after_save(Tag, Model) ->
-    {ok, Model:set_tmp({Tag, Model:tmp()})}.
+after_save(_OldModel, NewModel) ->
+    {ok, NewModel:set_tmp({'after', NewModel:tmp()})}.
 
 before_delete(_Model) ->
     ok.
@@ -53,6 +52,6 @@ before_after_test() ->
     {ok, Model} = ?MODULE:from_proplist([{tmp, data}]),
     {ok, Model2} = Model:save(),
     meck:unload(tq_sqlmodel_runtime),
-    ?assertEqual({create, {save, {before, data}}}, Model2:tmp()).
+    ?assertEqual({'after', {save, {before, data}}}, Model2:tmp()).
 
 -endif.

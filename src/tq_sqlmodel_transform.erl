@@ -66,11 +66,8 @@ model_option(module, Module, Model) ->
 model_option(before_save, Data, Model) ->
     Model2 = Model#db_model{before_save = to_list(Data)},
     {ok, Model2};
-model_option(after_create, Data, Model) ->
-    Model2 = Model#db_model{after_create = to_list(Data)},
-    {ok, Model2};
-model_option(after_update, Data, Model) ->
-    Model2 = Model#db_model{after_update = to_list(Data)},
+model_option(after_save, Data, Model) ->
+    Model2 = Model#db_model{after_save = to_list(Data)},
     {ok, Model2};
 model_option(before_delete, Data, Model) ->
     Model2 = Model#db_model{before_delete = to_list(Data)},
