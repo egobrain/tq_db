@@ -29,7 +29,8 @@
 build_model(Model) ->
     PrepareFuns =
         [
-         fun hooks_args_to_abstract/1
+         fun hooks_args_to_abstract/1,
+         fun fields_converters_to_abstract/1
         ],
     PreparedModel = prepare_model(PrepareFuns, Model),
     Builders = [
@@ -66,6 +67,24 @@ hooks_args_to_abstract(Model) ->
                 setelement(E, M, NewHooks)
         end,
     lists:foldl(Fun, Model, Indexes).
+
+fields_converters_to_abstract(#db_model{fields=Fields}=Model) ->
+    NewFields = [field_converters_args_to_abstract(F) || F <- Fields],
+    Model#db_model{fields=NewFields}.
+
+field_converters_args_to_abstract(Field) ->
+    Indexes =
+        [
+         #db_field.to_db_funs,
+         #db_field.from_db_funs
+        ],
+    Fun =
+        fun(E, M) ->
+                Hooks = element(E, M),
+                NewHooks = [function_args_to_abstract(H) || H <- Hooks],
+                setelement(E, M, NewHooks)
+        end,
+    lists:foldl(Fun, Field, Indexes).
 
 %% === Build ===================================================================
 

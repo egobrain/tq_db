@@ -18,6 +18,14 @@
               {db_type, any}
              ]}).
 
+-field({to_from,
+        [{from_ext, any},
+         {type, any},
+         {db_type, any},
+         {to_db, {to_db, [test]}},
+         {from_db, {from_db, [test]}}
+        ]}).
+
 -model([{table, <<"simple_table">>},
         {generate, [get, save, find, delete]},
 
@@ -28,6 +36,12 @@
        ]).
 
 any(A) -> A.
+
+to_db(Tag, Value) ->
+    {to_db, Tag, Value}.
+
+from_db(Tag, Value) ->
+    {from_db, Tag, Value}.
 
 before_save(Model) ->
     {ok, Model:set_tmp({before, Model:tmp()})}.
