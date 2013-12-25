@@ -8,5 +8,4 @@
                   stdlib
                  ]},
   {mod, {tq_db_app, []}}
-  ]}
  ]}.
