@@ -16,6 +16,7 @@
 
 -include("include/ast_helpers.hrl").
 
+-include_lib("tq_transform/include/access_mode.hrl").
 -include_lib("tq_transform/include/record_model.hrl").
 -include("include/db_model.hrl").
 
