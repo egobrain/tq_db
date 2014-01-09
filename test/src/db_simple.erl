@@ -1,4 +1,5 @@
 -module(db_simple).
+
 -compile({parse_transform, tq_sqlmodel_transform}).
 
 -field({index, [index,

@@ -96,21 +96,24 @@ build_get(#db_model{
              funs=#funs{get=GetName}
             }) ->
     IndexFields = [F || F <- Fields, F#db_field.is_index =:= true],
-    Vars = ["Var" ++ integer_to_list(I) || I <- lists:seq(1, length(IndexFields))],
+    Vars = [?var("Var" ++ integer_to_list(I)) || I <- lists:seq(1, length(IndexFields))],
 
     GetFun = ?function(GetName,
-                       [?clause([?var(V) || V <- Vars], none,
+                       [?clause(Vars, none,
                                 [
                                  begin
                                      ModuleStr = atom_to_list(Module),
-                                     IndexFields2 = lists:zip(Vars, IndexFields),
                                      Where = [begin
                                                   FieldStr = atom_to_list(F#db_field.name),
-                                                  ["$", ModuleStr, ".", FieldStr, " = #", ModuleStr, ".", FieldStr, "{", Var, "}"]
-                                              end || {Var, F} <- IndexFields2],
+                                                  ["${model}", ModuleStr, ".", FieldStr, " = ~", ModuleStr, ".", FieldStr]
+                                              end || F <- IndexFields],
                                      Where2 = string:join(Where, " AND "),
-                                     String = ["SELECT @* FROM $", ModuleStr, " WHERE ", Where2, " LIMIT 1;"],
-                                     ?cases(?apply(tq_sql, q, [?atom(Module), ?string(lists:flatten(String))]),
+                                     String = ["SELECT @{model}* FROM #", ModuleStr, " as model WHERE ", Where2, " LIMIT 1;"],
+                                     ?cases(?apply(tq_runtime_sql, model_query,
+                                                   [?atom(db),
+                                                    ?atom(Module),
+                                                    ?abstract(iolist_to_binary(String)),
+                                                    ?list(Vars)]),
                                             [?clause([?ok(?list([?var("R")]))], none,
                                                      [?ok(?var("R"))]),
                                              ?clause([?ok(?list([]))], none,
@@ -145,10 +148,10 @@ build_save(#db_model{
         end,
     SaveFun = ?function(SaveName, [?clause([?var('Model')], none, BodyAst)]),
     SaveHook= ?function('$save_hook',
-                         [?clause([?var('Model')], [],
-                                  [?apply(tq_sqlmodel_runtime, save,
-                                          [?apply('$db_changed_fields', [?var('Model')]),
-                                           ?var('Model')])])]),
+                        [?clause([?var('Model')], [],
+                                 [?apply(tq_sqlmodel_runtime, save,
+                                         [?apply('$db_changed_fields', [?var('Model')]),
+                                          ?var('Model')])])]),
     ExternalFuns =
         [
          SaveFun
@@ -168,7 +171,7 @@ build_find(#db_model{
               module=Module,
               funs=#funs{find=FindName}
              }) ->
-    Sql = "SELECT @* FROM $" ++ atom_to_list(Module) ++ " ",
+    Sql = "SELECT @{model}* FROM #" ++ atom_to_list(Module) ++ " as model ",
     FindFun = ?function(FindName,
                         [?clause([?var('Where'), ?var('Args')], none,
                                  [?apply(tq_runtime_sql, model_query,
@@ -191,28 +194,31 @@ build_delete(#db_model{
                 funs=#funs{delete=DeleteName}
                }) ->
     IndexFields = [F || F <- Fields, F#db_field.is_index =:= true],
-    Vars = ["Var" ++ integer_to_list(I) || I <- lists:seq(1, length(IndexFields))],
-    IndexFields2 = lists:zip(Vars, IndexFields),
+    Vars = [?var("Var" ++ integer_to_list(I)) || I <- lists:seq(1, length(IndexFields))],
     DeleteClause =
         [?clause([?var('M')], none,
                  [
-                  ?match(?record(Module, [?field(F#db_field.name, ?var(V)) || {V, F} <- IndexFields2]), ?var('M')),
+                  ?match(?record(Module, [?field(F#db_field.name, V) || {V, F} <- lists:zip(Vars, IndexFields)]), ?var('M')),
                   begin
                       ModuleStr = atom_to_list(Module),
-                      Where = [begin
-                                   FieldStr = atom_to_list(F#db_field.name),
-                                   ["$", ModuleStr, ".", FieldStr, " = #", ModuleStr, ".", FieldStr, "{", Var, "}"]
-                               end || {Var, F} <- IndexFields2],
+                      Where =
+                          [begin
+                               FieldStr = atom_to_list(F#db_field.name),
+                               ["$", ModuleStr, ".", FieldStr, " = ~", ModuleStr, ".", FieldStr]
+                           end || F <- IndexFields],
                       Where2 = string:join(Where, " AND "),
-                      String = ["DELETE FROM $", ModuleStr, " WHERE ", Where2, ";"],
-                      ?cases(?apply(tq_sql, q, [?atom(Module), ?string(lists:flatten(String))]),
+                      String = ["DELETE FROM #", ModuleStr, " WHERE ", Where2, ";"],
+                      ?cases(?apply(tq_runtime_sql, model_query,
+                                    [?atom(db),
+                                     ?atom(Module),
+                                     ?abstract(iolist_to_binary(String)),
+                                     ?list(Vars)]),
                              [?clause([?ok(?underscore)], none,
                                       [function_call(F, [?var('M')]) || F <- AfterHooks]++[?atom(ok)]),
                               ?clause([?error(?var("Reason"))], none,
                                       [?error(?var("Reason"))])])
                   end
                  ])],
-
     BodyAst = case BeforeHooks of
                   [] ->
                       DeleteClause;
@@ -294,8 +300,8 @@ field_constructor_function(#db_model{fields=Fields, module=Module}) ->
 db_changed_fields_function(#db_model{module=Module, fields=Fields}) ->
     ListAst = ?list([?tuple([?atom(F#db_field.name),
                              apply_hooks(
-                                F#db_field.to_db_funs,
-                                ?access(?var('Model'), Module, F#db_field.name)),
+                               F#db_field.to_db_funs,
+                               ?access(?var('Model'), Module, F#db_field.name)),
                              ?access(?var('Model'), Module, ?changed_suffix(F#db_field.name))
                             ])
                      || F <- Fields,

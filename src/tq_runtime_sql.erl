@@ -1,171 +1,148 @@
 -module(tq_runtime_sql).
 
--export(['query'/4, model_query/4, parse_sql/3]).
+-export([
+         'query'/4,
+         model_query/4,
+         parse/2
+        ]).
 
-model_query(PoolName, Model, Sql, Args) ->
-    case parse_sql(Model, Sql, Args) of
-        {ok, {Sql2, Args2, Fields}} ->
-            tq_sql:'query'(PoolName, Sql2, Args2, Model:constructor(Fields));
+model_query(PoolName, Model, RuntimeSql, Args) ->
+    case parse(Model, RuntimeSql) of
+        {ok, {Sql, Fields, DbTypes}} ->
+            Args2 = lists:zipwith(fun(W, F) -> W(F) end, DbTypes, Args),
+            tq_sql:'query'(PoolName, Sql, Args2, Model:constructor(Fields));
         {error, _Reason} = Err -> Err
     end.
 
-'query'(PoolName, Sql, Args, Constructor) ->
-    case parse_sql(undefined, Sql, Args) of
-        {ok, {Sql2, Args2, _Fields}} ->
-            tq_sql:'query'(PoolName, Sql2, Args2, Constructor);
+'query'(PoolName, RuntimeSql, Args, Constructor) ->
+    case parse(undefined, RuntimeSql) of
+        {ok, {Sql, _Fields, DbTypes}} ->
+            Args2 = lists:zipwith(fun(W, F) -> W(F) end, DbTypes, Args),
+            tq_sql:'query'(PoolName, Sql, Args2, Constructor);
         {error, _Reason} = Err -> Err
     end.
 
--spec parse_sql(Model, Str, Args) -> {ok, {Sql, Types, Fields}} | {error, Reason} when
-      Str :: binary(),
-      Model :: atom(),
-      Args :: [any()],
-      Sql :: binary(),
-      Types :: [any()],
-      Fields :: [atom()],
-      Reason :: any().
-parse_sql(Model, Str, Args) ->
-    parse(Str, {Model, Args}, {<<>>, [], []}).
+-record(state, {
+          acc = <<>>,
+          args = [],
+          fields = [],
+          model
+         }).
 
-parse(<<$@, Rest/binary>>, {Model, _Args} = Opts, {Sql, Types, Fields}) when Model =/= undefined ->
-    scan_cf(Rest,
-            fun({Field, Str}, Rest2) ->
-                    parse(Rest2, Opts, {<<Sql/binary, Str/binary>>, Types, [Field|Fields]});
-               ('*', Rest2) ->
-                    NewFields = Model:'$meta'({db_fields, r}),
-                    <<$,, Str/binary>> = << <<$,, (Model:'$meta'({db_alias, F}))/binary>> || F <- NewFields >>,
-                    parse(Rest2, Opts, {<<Sql/binary, Str/binary>>, Types, lists:reverse(NewFields) ++ Fields});
-               ('...', Rest2) ->
-                    NewFields = Model:'$meta'({db_fields, r}) -- Fields,
-                    <<$,, Str/binary>> = << <<$,, (Model:'$meta'({db_alias, F}))/binary>> || F <- NewFields >>,
-                    parse(Rest2, Opts, {<<Sql/binary, Str/binary>>, Types, lists:reverse(NewFields) ++ Fields});
-               (Field, Rest2) ->
-                    parse(Rest2, Opts, {<<Sql/binary, (Model:'$meta'({db_alias, Field}))/binary>>, Types, [Field|Fields]})
-            end);
-parse(<<"$$", Rest/binary>>, Opts, {Sql, Types, Fields}) ->
-    scan_full_alias(Rest,
-                    fun(Alias, Rest2) ->
-                            parse(Rest2, Opts, {<<Sql/binary, Alias/binary>>, Types, Fields})
-                    end);
-parse(<<$$, Rest/binary>>, Opts, {Sql, Types, Fields}) ->
-    scan_alias(Rest,
-               fun(Alias, Rest2) ->
-                       parse(Rest2, Opts, {<<Sql/binary, Alias/binary>>, Types, Fields})
-               end);
-parse(<<$~, Rest/binary>>, {Model, [A | Args]}, {Sql, Types, Fields}) ->
-    scan_type(Rest,
-              fun(TypeWrapper, Rest2) ->
-                      parse(Rest2, {Model, Args}, {<<Sql/binary, "~s">>, [TypeWrapper(A) | Types], Fields})
-              end);
-parse(<<>>, _Opts, {Sql, Types, Fields}) ->
-    {ok, {Sql,
-          lists:reverse(Types),
-          lists:reverse(Fields)}};
-parse(<<C, Rest/binary>>, Opts, {Sql, Types, Fields}) ->
-    parse(Rest, Opts, {<<Sql/binary, C>>, Types, Fields}).
+parse(Model, Bin) ->
+    tq_runtime_sql_parser:parse(Bin, fun sql_joiner/3, #state{model=Model}).
 
-%% Scan model field.
+sql_joiner({string, _Pos, Str}, #state{acc=Acc}=State, Next) ->
+    Acc2 = <<Acc/binary, Str/binary>>,
+    Next(State#state{acc=Acc2});
+sql_joiner({field_query, Pos, FieldQuery}, State, Next) ->
+    field_query(<<>>, FieldQuery, false, Pos, State, Next);
+sql_joiner({field_query_alias, Pos, FieldQuery}, State, Next) ->
+    field_query(<<>>, FieldQuery, true, Pos, State, Next);
+sql_joiner({field_alias, _Pos, MF}, State, Next) ->
+    field_alias(<<>>, MF, _Pos, State, Next);
+sql_joiner({field_type, _Pos, MF}, #state{acc=Acc, args=Args, model=DefaultModel}=State, Next) ->
+    {Model, Field} = get_model_and_field(MF, DefaultModel),
+    Type = Model:'$meta'({db_type, Field}),
+    TypeWrapper = fun(Val) -> {Type, Model:field_to_db(Field, Val)} end,
+    State2 = State#state{
+               acc = <<Acc/binary, "~s">>,
+               args = [TypeWrapper|Args]
+              },
+    Next(State2);
+sql_joiner({table, _Pos, BinModel}, #state{acc=Acc}=State, Next) ->
+    Model = binary_to_atom(BinModel),
+    Table = Model:'$meta'(table),
+    Acc2 = <<Acc/binary, Table/binary>>,
+    Next(State#state{acc=Acc2});
+sql_joiner({table_link, _Pos, TableLink, {field_query, Pos, FieldQuery}}, State, Next) ->
+    field_query(<<$", TableLink/binary, $", $.>>, FieldQuery, false, Pos, State, Next);
+sql_joiner({table_link, _Pos, TableLink, {field_query_alias, Pos, FieldQuery}}, State, Next) ->
+    field_query(<<$", TableLink/binary, $", $.>>, FieldQuery, true, Pos, State, Next);
+sql_joiner({table_link, _Pos, TableLink, {field_alias, _Pos2, MF}}, State, Next) ->
+    field_alias(<<$", TableLink/binary, $", $.>>, MF, _Pos, State, Next);
+sql_joiner({type, _Pos, BinType}, #state{acc=Acc, args=Args}=State, Next) ->
+    Type = binary_to_atom(BinType),
+    TypeWrapper = fun(Val) -> {Type, Val} end,
+    State2 = State#state{
+               acc = <<Acc/binary, "~s">>,
+               args = [TypeWrapper|Args]
+              },
+    Next(State2);
+sql_joiner(finish, #state{acc=Acc, fields=Fields, args=Args}, Next) ->
+    Next({Acc, lists:flatten(Fields), lists:reverse(Args)}).
 
-scan_cf(<<"...", Rest/binary>>, Fun) ->
-    Fun('...', Rest);
-scan_cf(<<$*, Rest/binary>>, Fun) ->
-    Fun('*', Rest);
-scan_cf(Data, Fun) ->
-    token(Data,
-          fun(Field, <<$(, Rest/binary>>) ->
-                  braced(Rest,
-                         fun(Str, Rest2) ->
-                                 Fun({binary_to_atom(Field), Str}, Rest2)
-                         end);
-             (Field, Rest3) ->
-                  Fun(binary_to_atom(Field), Rest3)
-          end).
+get_model_and_field({BinModel, BinFields}, _DefaultModel) ->
+    {binary_to_atom(BinModel), binary_to_atom(BinFields)};
+get_model_and_field(BinField, DefaultModel) when is_binary(BinField) ->
+    {DefaultModel, binary_to_atom(BinField)};
+get_model_and_field(AtomField, DefaultModel) when is_atom(AtomField) ->
+    {DefaultModel, AtomField}.
 
-%% Scan field alias / table alias
+field_alias(TableLink, MF, _Pos, #state{acc=Acc, model=DefaultModel} = State, Next) ->
+    {Model, Field} = get_model_and_field(MF, DefaultModel),
+    Alias = Model:'$meta'({db_alias, Field}),
+    State2 = State#state{
+               acc = <<Acc/binary, TableLink/binary, Alias/binary>>
+              },
+    Next(State2).
 
-scan_alias(Data, Fun) ->
-    token(Data,
-          fun(ModelStr, <<$., Rest/binary>>) ->
-                  token(Rest,
-                        fun(FieldStr, Rest2) ->
-                                Model = binary_to_atom(ModelStr),
-                                Field = binary_to_atom(FieldStr),
-                                Alias = Model:'$meta'({db_alias, Field}),
-                                Fun(Alias, Rest2)
-                        end);
-             (ModelStr, Rest) ->
-                  Model2 = binary_to_atom(ModelStr),
-                  Fun(Model2:'$meta'(table), Rest)
-          end).
+field_query(TableLink, '...', _Expr, _Pos,
+            #state{acc=Acc, fields=Fields, model=Model}=State, Next) ->
+    DbFields = Model:'$meta'({db_fields, r}),
+    ResultFields = DbFields -- Fields,
+    FieldsSql = join_fields(TableLink, Model, ResultFields),
+    State2 = State#state{
+               acc = <<Acc/binary, FieldsSql/binary>>,
+               fields = Fields ++ ResultFields
+              },
+    Next(State2);
+field_query(TableLink, '*', _IsAlias, _Pos,
+            #state{acc=Acc, fields=Fields, model=Model}=State, Next) ->
+    DbFields = Model:'$meta'({db_fields, r}),
+    FieldsSql = join_fields(TableLink, Model, DbFields),
+    State2 = State#state{
+               acc = <<Acc/binary, FieldsSql/binary>>,
+               fields = Fields ++ DbFields
+              },
+    Next(State2);
+field_query(TableLink, {BinModel, BinField}, IsAlias, Pos,
+            #state{model=Model}=State, Next) ->
+    M = binary_to_atom(BinModel),
+    case M of
+        Model ->
+            field_query(TableLink, BinField, IsAlias, Pos, State, Next);
+        _ ->
+            {error, {wrong_model, {Pos, "Querying data from another model not supported"}}}
+    end;
+field_query(TableLink, BinField, IsAlias, _Pos,
+            #state{acc=Acc, fields=Fields, model=Model}=State, Next)
+  when is_binary(BinField) ->
+    Field = binary_to_atom(BinField),
+    State2 =
+        case IsAlias of
+            true ->
+                FieldSql = field_to_sql(TableLink, Model, Field),
+                State#state{
+                  acc = <<Acc/binary, FieldSql/binary>>
+                 };
+            false ->
+                State
+        end,
+    State3 = State2#state{
+               fields = Fields ++ [Field]
+              },
+    Next(State3).
 
-scan_full_alias(Data, Fun) ->
-    token(Data,
-          fun(ModelStr, <<$., Rest/binary>>) ->
-                  token(Rest,
-                        fun(FieldStr, Rest2) ->
-                                Model = binary_to_atom(ModelStr),
-                                Field = binary_to_atom(FieldStr),
-                                Table = Model:'$meta'(table),
-                                Alias = Model:'$meta'({db_alias, Field}),
-                                FullAlias = <<Table/binary, $., Alias/binary>>,
-                                Fun(FullAlias, Rest2)
-                        end);
-             (_ModelStr, _Rest) ->
-                  {error, "model field must be specified"}
-          end).
+join_fields(_TableLink, _Model, []) ->
+    <<>>;
+join_fields(TableLink, Model, Fields) ->
+    <<$,, Str/binary>> = << <<$,, (field_to_sql(TableLink, Model, F))/binary>> || F <- Fields >>,
+    Str.
 
-%% Scan type
+field_to_sql(TableLink, Model, Field) ->
+    <<TableLink/binary, (Model:'$meta'({db_alias, Field}))/binary>>.
 
-scan_type(Data, Fun) ->
-    token(Data,
-          fun(ModelStr, <<$., Rest/binary>>) ->
-                  token(Rest,
-                        fun(FieldStr, Rest2) ->
-                                Model = binary_to_atom(ModelStr),
-                                Field = binary_to_atom(FieldStr),
-                                TypeWrapper =
-                                    fun(Val) ->
-                                            {Model:'$meta'({db_type, Field}),
-                                             Model:field_to_db(Field, Val)}
-                                    end,
-                                Fun(TypeWrapper, Rest2)
-                        end);
-             (<<>>, _Rest) ->
-                  {error, "model field must be specified"};
-             (TypeStr, Rest) ->
-                  TypeWrapper =
-                      fun(Val) ->
-                              {binary_to_atom(TypeStr), Val}
-                      end,
-                  Fun(TypeWrapper, Rest)
-          end).
-
-token(Data, Fun) ->
-    token(Data, Fun, <<>>).
-
-token(<<C, Rest/binary>>, Fun, Acc) when C >= $A, C =< $z ->
-    token(Rest, Fun, <<Acc/binary, C>>);
-token(<<_C,_/binary>>=Data, Fun, Acc) ->
-    Fun(Acc, Data);
-token(<<>>, Fun, Acc) ->
-    Fun(Acc, <<>>).
-
-braced(Data, Fun) ->
-    braced(Data, Fun, <<>>, 0).
-
-braced(<<$$, Rest/binary>>, Fun, Str, BrCnt) ->
-    scan_alias(Rest, fun(Alias, Rest2) ->
-                             braced(Rest2, Fun, <<Str/binary, Alias/binary>>, BrCnt)
-                     end);
-braced(<<C, Rest/binary>>, Fun, Str, BrCnt) when C =:= $( ->
-    braced(Rest, Fun, <<Str/binary, C>>, BrCnt+1);
-braced(<<C, Rest/binary>>, Fun, Str, 0) when C =:= $) ->
-    Fun(Str, Rest);
-braced(<<C, Rest/binary>>, Fun, Str, BrCnt) when C =:= $) ->
-    braced(Rest, Fun, <<Str/binary, C>>, BrCnt-1);
-braced(<<C, Rest/binary>>, Fun, Str, BrCnt) ->
-    braced(Rest, Fun, <<Str/binary, C>>, BrCnt);
-braced(<<>>, _Fun, _Str, _BrCnt) ->
-    {error, "enclosed br ("}.
-
-binary_to_atom(Bin) -> list_to_atom(binary_to_list(Bin)).
+binary_to_atom(Bin) ->
+    List = binary_to_list(Bin),
+    list_to_existing_atom(List).
