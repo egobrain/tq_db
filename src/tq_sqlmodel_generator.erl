@@ -288,13 +288,24 @@ field_constructor_function(#db_model{fields=Fields, module=Module}) ->
                        [?func([?clause([?var('Val'), ?var('Model')], none,
                                        case F#db_field.record#record_field.stores_in_record of
                                            true ->
-                                               [?match(?var('F'),SetterAst(F)),
-                                                ?record(?var('F'), Module, [?field(?changed_suffix(F#db_field.name), ?atom(false))])];
+                                               case F#db_field.record#record_field.setter of
+                                                   true ->
+                                                       [?match(?var('F'),SetterAst(F)),
+                                                        ?record(?var('F'), Module, [?field(?changed_suffix(F#db_field.name), ?atom(false))])];
+                                                   false ->
+                                                       [
+                                                        ?record(?var('Model'), Module,
+                                                                [
+                                                                 ?field(F#db_field.name, apply_hooks(F#db_field.from_db_funs, ?var('Val'))),
+                                                                 ?field(?changed_suffix(F#db_field.name), ?atom(false))
+                                                                ])
+                                                       ]
+                                               end;
                                            false ->
                                                [SetterAst(F)]
                                        end)])]) ||
                   F <- Fields,
-                  F#db_field.record#record_field.setter =/= false
+                  F#db_field.record#record_field.getter =/= false
               ] ++ [DefaultClasuse]).
 
 db_changed_fields_function(#db_model{module=Module, fields=Fields}) ->

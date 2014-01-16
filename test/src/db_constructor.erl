@@ -20,15 +20,15 @@
 %% Opts [r, w, rw, sr, sw, srsw, rsw, srw]
 
 constructor_fail_test_() ->
-    Tests = [r, sr],
+    Tests = [w, sw],
     [fun() -> ?_assertException(error, function_clause, constructor([F])) end || F <- Tests].
 
 constructor_test_() ->
-    Tests = [w, rw, sw, srsw, rsw, srw],
+    Tests = [r, rw, sr, srsw, rsw, srw],
     [fun() ->  constructor([F]) end || F <- Tests].
 
 constructor_changed_fields_test() ->
-    Opts = [w, rw, sw, srsw, rsw, srw],
+    Opts = [r, rw, sr, srsw, rsw, srw],
     Constructor = constructor(Opts),
     Model = Constructor(Opts),
     ?assertEqual(Model:get_changed_fields(), []).
