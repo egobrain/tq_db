@@ -36,7 +36,7 @@ init1(Model) ->
         undefined ->
             Model;
         Counter ->
-            Model:set_counter(Counter*3)
+            Model#?MODULE{counter = Counter*3}
     end.
 
 init2(Model) ->
@@ -44,7 +44,7 @@ init2(Model) ->
         undefined ->
             Model;
         Counter ->
-            Model:set_counter(Counter*10)
+            Model#?MODULE{counter = Counter*10}
     end.
 
 field_init1(FieldVal) ->
@@ -60,17 +60,18 @@ to_db(Value) ->
 
 from_db_test_() ->
     C = fun(V) ->
-                {ok, Model} = from_proplist([{counter, V}]),
-                Model#?MODULE{'$is_new$'=false}
+                #?MODULE{
+                    counter = V
+                   }
         end,
-    [fun() -> ?assertEqual(C(30), (constructor([]))([])) end,
+    [fun() -> ?assertEqual(C(undefined), (constructor([]))([])) end,
      fun() -> ?assertEqual(C(150), (constructor([counter]))([5])) end].
 
 from_db_field_test_() ->
     G = fun(M) ->
                 M:from_db_field()
         end,
-    [fun() -> ?assertEqual(1, G((constructor([]))([]))) end,
+    [fun() -> ?assertEqual(undefined, G((constructor([]))([]))) end,
      fun() -> ?assertEqual(150, G((constructor([from_db_field]))([5]))) end].
 
 to_db_test() ->

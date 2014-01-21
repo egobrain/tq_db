@@ -259,8 +259,6 @@ field_from_db_function(Model) ->
                || F <- Model#db_model.fields]).
 
 constructor1_function(#db_model{from_db_funs=InitFuns, module=Module}) ->
-    SetIsNotNew = ?record(?var('Model'), Module, [?field('$is_new$', ?atom(false))]),
-    FinalForm = apply_hooks(InitFuns, SetIsNotNew),
     ?function(constructor,
               [?clause([?var('Fields')], none,
                        [?match(?var('Constructors'),
@@ -271,9 +269,9 @@ constructor1_function(#db_model{from_db_funs=InitFuns, module=Module}) ->
                                                ?apply(lists, foldl,
                                                       [?func([?clause([?tuple([?var('F'), ?var('A')]), ?var('M')], none,
                                                                       [?apply_(?var('F'), [?var('A'), ?var('M')])])]),
-                                                       ?apply(new, []),
+                                                       ?record(Module, []),
                                                        ?apply(lists, zip, [?var('Constructors'), ?var('List')])])),
-                                        FinalForm
+                                        apply_hooks(InitFuns, ?var('Model'))
                                        ]
                                       )])])]).
 
@@ -351,7 +349,7 @@ meta_clauses(#db_model{table=Table, fields=Fields}) ->
     [$, | SqlRFields] = lists:flatten([[$,, atom_to_quated_string(F#db_field.name)]
                                        || F <- Fields, F#db_field.record#record_field.mode#access_mode.sr]),
     RSqlFieldsClause = ?clause([?abstract({sql, {db_fields, r}})], none,
-                               [?string(SqlRFields)]),
+                               [?abstract(iolist_to_binary(SqlRFields))]),
 
     lists:flatten([TableClause,
                    IndexesClause,
