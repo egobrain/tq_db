@@ -7,32 +7,54 @@
 save(Changed, Model) ->
     case {Model:is_new(), Changed} of
         {true, []} ->
-            {error,not_changed};
+            {error, not_changed};
         {false, []} ->
             {ok, Model};
         {IsNew, _} ->
             Table = Model:'$meta'(table),
             Returning = Model:'$meta'({sql,{db_fields,r}}),
-            Constructor = (element(1, Model)):constructor(Model:'$meta'({db_fields,r})),
+            Constructor = (element(1, Model)):constructor(Model:'$meta'({db_fields, r})),
             Args = [{Model:'$meta'({db_type,F}),V} || {F,V} <- Changed],
-            {Sql2, Args2} = case IsNew of
-                                true ->
-                                    Fields = join([Model:'$meta'({db_alias,F}) || {F,_} <- Changed], $,),
-                                    Values = join(["~s" || _ <- Changed], $,),
-                                    Sql = ["INSERT INTO ", Table, "(", Fields, ") VALUES (", Values, ") RETURNING ", Returning, ";"],
-                                    {Sql, Args};
-                                false ->
-                                    Indexes = Model:'$meta'(indexes),
-                                    Values = join([[Model:'$meta'({db_alias, F}), " = ~s"] || {F, _} <- Changed], $,),
-                                    Where1 = join([[Model:'$meta'({db_alias, F}), " = ~s"] || F <- Indexes], " AND "),
-                                    Where2 = case Where1 of
-                                                 [] -> [];
-                                                 _ -> [" WHERE ", Where1]
-                                             end,
-                                    WhereArgs = [{Model:'$meta'({db_type, F}), Model:F()} || F <- Indexes],
-                                    Sql = ["UPDATE ", Table, " SET ", Values, Where2, " RETURNING ", Returning, ";"],
-                                    {Sql, Args ++ WhereArgs}
-                            end,
+            {Sql2, Args2} =
+                case IsNew of
+                    true ->
+                        <<$,, Fields/binary>>
+                            = << <<$,, (Model:'$meta'({db_alias,F}))/binary>>
+                                 || {F,_} <- Changed >>,
+                        {<<$,, Values/binary>>, _} =
+                            each_with(
+                              fun(_, I, Acc) ->
+                                      BinIndex = integer_to_binary(I),
+                                      <<Acc/binary, ", $", BinIndex/binary>>
+                              end, <<>>, Changed),
+                        Sql = <<"INSERT INTO ", Table/binary,
+                                "(", Fields/binary, ")",
+                                " VALUES (", Values/binary, ")",
+                                " RETURNING ", Returning/binary, ";">>,
+                        {Sql, Args};
+                    false ->
+                        Indexes = Model:'$meta'(indexes),
+                        {<<$,, Values/binary>>, Cnt} =
+                            each_with(
+                              fun({F, _V}, I, Acc) ->
+                                      Alias = Model:'$meta'({db_alias, F}),
+                                      BinIndex = integer_to_binary(I),
+                                      <<Acc/binary, ", ", Alias/binary, " = $", BinIndex/binary>>
+                              end, <<>>, Changed),
+                        {<<" AND ", Where/binary>>, _} =
+                            each_with(
+                              fun(F, I, Acc) ->
+                                      Alias = Model:'$meta'({db_alias, F}),
+                                      BinIndex = integer_to_binary(I),
+                                      <<Acc/binary, " AND ", Alias/binary, " = $", BinIndex/binary>>
+                              end, Cnt, <<>>, Indexes),
+                        WhereArgs = [{Model:'$meta'({db_type, F}), Model:F()} || F <- Indexes],
+                        Sql = <<"UPDATE ", Table/binary,
+                                " SET ", Values/binary,
+                                " WHERE ", Where/binary,
+                                " RETURNING ", Returning/binary, ";">>,
+                        {Sql, Args ++ WhereArgs}
+                end,
             case tq_sql:'query'(db, Sql2, Args2, Constructor) of
                 {ok, 1, [Model2]} ->
                     {ok, Model2};
@@ -41,11 +63,14 @@ save(Changed, Model) ->
             end
     end.
 
+each_with(Fun, Acc, List) ->
+    each_with(Fun, 1, Acc, List).
+each_with(_Fun, Index, Acc, []) ->
+    {Acc, Index};
+each_with(Fun, Index, Acc, [H|T]) ->
+    Acc2 = Fun(H, Index, Acc),
+    each_with(Fun, Index+1, Acc2, T).
 
-join([], _Sep) ->
-    [];
-join([H|T], Sep) ->
-    [H | [[Sep, E] || E <- T]].
 
 success_foldl(Data, []) ->
     {ok, Data};

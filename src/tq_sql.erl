@@ -20,6 +20,6 @@
 'query'(PoolName, Sql, Args, Constructor) ->
     TransuctionFun =
         fun(Worker) ->
-                gen_server:call(Worker, {'query', binary_to_list(iolist_to_binary(Sql)), Args, Constructor})
+                gen_server:call(Worker, {'query', Sql, Args, Constructor})
         end,
     poolboy:transaction(PoolName, TransuctionFun).

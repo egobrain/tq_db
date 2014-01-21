@@ -19,10 +19,7 @@ connect(Args) ->
 'query'(Conn, Sql, Args) ->
     case escape_args(Args) of
         {ok, Args2} ->
-            Indexes = [ [$$, integer_to_list(I)] ||
-                          I <- lists:seq(1, length(Args))],
-            Sql2 = lists:flatten(io_lib:format(Sql, Indexes)),
-            case pgsql:equery(Conn, Sql2, Args2) of
+            case pgsql:equery(Conn, Sql, Args2) of
                 {ok, _Columns, Rows} ->
                     {ok, Rows};
                 {ok, Count} ->

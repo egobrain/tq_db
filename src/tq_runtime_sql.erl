@@ -26,7 +26,8 @@ model_query(PoolName, Model, RuntimeSql, Args) ->
           acc = <<>>,
           args = [],
           fields = [],
-          model
+          model,
+          arg_index = 0
          }).
 
 parse(Model, Bin) ->
@@ -41,15 +42,11 @@ sql_joiner({field_query_alias, Pos, FieldQuery}, State, Next) ->
     field_query(<<>>, FieldQuery, true, Pos, State, Next);
 sql_joiner({field_alias, _Pos, MF}, State, Next) ->
     field_alias(<<>>, MF, _Pos, State, Next);
-sql_joiner({field_type, _Pos, MF}, #state{acc=Acc, args=Args, model=DefaultModel}=State, Next) ->
+sql_joiner({field_type, _Pos, MF}, #state{model=DefaultModel}=State, Next) ->
     {Model, Field} = get_model_and_field(MF, DefaultModel),
     Type = Model:'$meta'({db_type, Field}),
     TypeWrapper = fun(Val) -> {Type, Model:field_to_db(Field, Val)} end,
-    State2 = State#state{
-               acc = <<Acc/binary, "~s">>,
-               args = [TypeWrapper|Args]
-              },
-    Next(State2);
+    arg_type(TypeWrapper, State, Next);
 sql_joiner({table, _Pos, BinModel}, #state{acc=Acc}=State, Next) ->
     Model = binary_to_atom(BinModel),
     Table = Model:'$meta'(table),
@@ -61,14 +58,10 @@ sql_joiner({table_link, _Pos, TableLink, {field_query_alias, Pos, FieldQuery}}, 
     field_query(<<$", TableLink/binary, $", $.>>, FieldQuery, true, Pos, State, Next);
 sql_joiner({table_link, _Pos, TableLink, {field_alias, _Pos2, MF}}, State, Next) ->
     field_alias(<<$", TableLink/binary, $", $.>>, MF, _Pos, State, Next);
-sql_joiner({type, _Pos, BinType}, #state{acc=Acc, args=Args}=State, Next) ->
+sql_joiner({type, _Pos, BinType}, State, Next) ->
     Type = binary_to_atom(BinType),
     TypeWrapper = fun(Val) -> {Type, Val} end,
-    State2 = State#state{
-               acc = <<Acc/binary, "~s">>,
-               args = [TypeWrapper|Args]
-              },
-    Next(State2);
+    arg_type(TypeWrapper, State, Next);
 sql_joiner(finish, #state{acc=Acc, fields=Fields, args=Args}, Next) ->
     Next({Acc, lists:flatten(Fields), lists:reverse(Args)}).
 
@@ -133,6 +126,17 @@ field_query(TableLink, BinField, IsAlias, _Pos,
                fields = Fields ++ [Field]
               },
     Next(State3).
+
+arg_type(TypeWrapper, #state{acc=Acc, args=Args, arg_index=ArgIndex} = State, Next) ->
+    NewArgIndex = ArgIndex + 1,
+    BinArgIndex = integer_to_binary(NewArgIndex),
+    State2 =
+        State#state{
+          acc = <<Acc/binary, $$, BinArgIndex/binary>>,
+          args = [TypeWrapper|Args],
+          arg_index = NewArgIndex
+         },
+    Next(State2).
 
 join_fields(_TableLink, _Model, []) ->
     <<>>;
