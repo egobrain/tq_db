@@ -47,59 +47,57 @@ transform_error(Error) ->
 escape_args(Args) ->
     tq_transform_utils:error_writer_map(fun escape_arg/1, Args).
 
-escape_arg({integer, Arg}) ->
+escape_arg({Name, Arg}) when
+      Name =:= smallint;
+      Name =:= int2;
+      Name =:= integer;
+      Name =:= int4;
+      Name =:= bigint;
+      Name =:= int8
+      ->
     case Arg of
-        Str when is_list(Str) ->
-            case string:to_integer(Str) of
-                {Int, []} ->
-                    {ok, Int};
-                _ ->
-                    %% ?ERR("BD Error [{arg, ~p}, {reason, \"must be valid integer\"}]", [Arg]),
+        Bin when is_binary(Bin) ->
+            try
+                {ok, binary_to_integer(Bin)}
+            catch _ ->
                     {error, bad_arg}
             end;
-        Bin when is_binary(Bin) ->
-            escape_arg({integer, binary_to_list(Arg)});
         Int when is_integer(Int) ->
             {ok, Int};
         _ ->
             %% ?ERR("BD Error [{arg, ~p}, {reason, \"must be valid integer\"}]", [Arg]),
             {error, bad_arg}
     end;
-escape_arg({number, Arg}) ->
+escape_arg({Name, Arg}) when
+      Name =:= real;
+      Name =:= float4;
+      Name =:= float8 ->
     case Arg of
-        Str when is_list(Str) ->
-            case string:to_integer(Str) of
-                {Int, []} ->
-                    {ok, Int};
-                _ ->
-                    case string:to_float(Str) of
-                        {Float, []} ->
-                            {ok, Float};
-                        _ ->
-                            %% ?ERR("BD Error [{arg, ~p}, {reason, \"must be valid number\"}]", [Arg]),
+        Bin when is_binary(Bin) ->
+            try
+                {ok, binary_to_integer(Bin)}
+            catch _ ->
+                    try
+                        {ok, binary_to_float(Bin)}
+                    catch _ ->
                             {error, bad_arg}
                     end
             end;
-        Bin when is_binary(Bin) ->
-            escape_arg({number, binary_to_list(Arg)});
         Int when is_integer(Int) ->
             {ok, Int};
-        Num when is_float(Num) ->
-            {ok, Num};
+        Float when is_float(Float) ->
+            {ok, Float};
         _ ->
             %% ?ERR("BD Error [{arg, ~p}, {reason, \"must be valid number\"}]", [Arg]),
             {error, bad_arg}
     end;
-escape_arg({string, Arg}) ->
+escape_arg({Name, Arg}) when
+      Name =:= string;
+      Name =:= text;
+      Name =:= varchar ->
     case Arg of
-        Str when is_list(Str) ->
-            {ok, Str};
         Bin when is_binary(Bin) ->
             {ok, Bin};
-        Int when is_integer(Int) ->
-            {ok, lists:flatten(io_lib:format("'~p'", [Int]))};
-        Num when is_float(Num) ->
-            {ok, lists:flatten(io_lib:format("'~p'", [Num]))};
         _ ->
             %% ?ERR("BD Error [{arg, ~p}, {reason, \"must be valid number\"}]", [Arg]),
             {error, bad_arg}
@@ -112,7 +110,9 @@ escape_arg({datetime, Arg}) ->
             %% ?ERR("BD Error [{arg, ~p}, {reason, \"must be valid date\"}]", [Arg]),
             {error, bad_arg}
     end;
-escape_arg({boolean, Arg}) ->
+escape_arg({Name, Arg}) when
+      Name =:= boolean;
+      Name =:= bool ->
     case Arg of
         true ->
             {ok, true};
