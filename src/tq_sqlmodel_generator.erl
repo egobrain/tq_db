@@ -195,42 +195,68 @@ build_delete(#db_model{
                }) ->
     IndexFields = [F || F <- Fields, F#db_field.is_index =:= true],
     Vars = [?var("Var" ++ integer_to_list(I)) || I <- lists:seq(1, length(IndexFields))],
-    DeleteClause =
-        [?clause([?var('M')], none,
-                 [
-                  ?match(?record(Module, [?field(F#db_field.name, V) || {V, F} <- lists:zip(Vars, IndexFields)]), ?var('M')),
-                  begin
-                      ModuleStr = atom_to_list(Module),
-                      Where =
-                          [begin
-                               FieldStr = atom_to_list(F#db_field.name),
-                               ["$", ModuleStr, ".", FieldStr, " = ~", ModuleStr, ".", FieldStr]
-                           end || F <- IndexFields],
-                      Where2 = string:join(Where, " AND "),
-                      String = ["DELETE FROM #", ModuleStr, " WHERE ", Where2, ";"],
-                      ?cases(?apply(tq_runtime_sql, model_query,
-                                    [?atom(db),
-                                     ?atom(Module),
-                                     ?abstract(iolist_to_binary(String)),
-                                     ?list(Vars)]),
-                             [?clause([?ok(?underscore)], none,
-                                      [function_call(F, [?var('M')]) || F <- AfterHooks]++[?atom(ok)]),
-                              ?clause([?error(?var("Reason"))], none,
-                                      [?error(?var("Reason"))])])
-                  end
-                 ])],
-    BodyAst = case BeforeHooks of
-                  [] ->
-                      DeleteClause;
-                  _ ->
-                      [?clause([?var('Model')], none,
-                               [?apply(tq_sqlmodel_runtime, success_foldl,
-                                       [?var('Model'),
-                                        ?list([lambda_function(F) || F <- BeforeHooks]
-                                              ++ [?func(DeleteClause)])])]
-                              )]
-              end,
-    DeleteFun = ?function(DeleteName, BodyAst),
+    ModuleStr = atom_to_list(Module),
+    Where =
+        [begin
+             FieldStr = atom_to_list(F#db_field.name),
+             ["$", ModuleStr, ".", FieldStr, " = ~", ModuleStr, ".", FieldStr]
+         end || F <- IndexFields],
+    Where2 = string:join(Where, " AND "),
+    String = ["DELETE FROM #", ModuleStr, " WHERE ", Where2, ";"],
+    MatchVars =
+        fun(VarM) ->
+                ?match(?record(Module,
+                               [?field(F#db_field.name, V)
+                                || {V, F} <- lists:zip(Vars, IndexFields)]),
+                       VarM)
+        end,
+    CallDeleteAst =
+        ?apply(tq_runtime_sql, model_query,
+               [?atom(db),
+                ?atom(Module),
+                ?abstract(iolist_to_binary(String)),
+                         ?list(Vars)]),
+    ReturnOkAst =
+        fun(Ast) ->
+                ?cases(Ast,
+                       [
+                        ?clause([?ok(?underscore)], none, [?atom(ok)]),
+                        ?clause([?match(?error(?var('_Reason')), ?var('Err'))], none, [?var('Err')])
+                       ])
+        end,
+
+    DeleteFunBody =
+        case BeforeHooks =:= [] andalso AfterHooks =:= [] of
+            true ->
+                [
+                 MatchVars(?var('Model')),
+                 ReturnOkAst(CallDeleteAst)
+                ];
+            false ->
+                LambdasListAst =
+                    ?list(
+                       lists:flatten(
+                         [
+                          [lambda_function(F) || F <- BeforeHooks],
+                      ?func([?clause([?var('M')], none,
+                                     [
+                                      MatchVars(?var('M')),
+                                      CallDeleteAst
+                                     ])]),
+                          [lambda_function(F) || F <- AfterHooks]
+                         ])
+                      ),
+                FoldlAst = ?apply(tq_sqlmodel_runtime, success_foldl,
+                              [
+                               ?var('Model'),
+                               LambdasListAst
+                              ]),
+                [ReturnOkAst(FoldlAst)]
+        end,
+
+    DeleteFun =
+        ?function(DeleteName, [?clause([?var('Model')], none, DeleteFunBody)]),
+
     Export = ?export_fun(DeleteFun),
     {[Export], [DeleteFun]};
 build_delete(_Model) ->
@@ -369,6 +395,8 @@ function_call({Mod, Fun}, Args) ->
 function_call(Fun, Args) ->
     ?apply(Fun, Args).
 
+lambda_function({Mod, Fun, []}) ->
+    lambda_function({Mod, Fun});
 lambda_function({Mod, Fun, FunArgs}) ->
     ?func([?clause([?var('M')], none,
                    [?apply(Mod, Fun, FunArgs ++ [?var('M')])])]);
