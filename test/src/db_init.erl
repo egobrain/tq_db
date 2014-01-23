@@ -75,13 +75,13 @@ from_db_field_test_() ->
      fun() -> ?assertEqual(150, G((constructor([from_db_field]))([5]))) end].
 
 to_db_test() ->
-    meck:new(tq_sqlmodel_runtime, [unstick, passthrough]),
-    meck:expect(tq_sqlmodel_runtime, 'save',
-                fun(Changed, _M) ->
-                        lists:keyfind(counter, 1, Changed)
-                end),
+    Do =
+        test_utils:stumb_mf(
+          tq_sqlmodel_runtime, 'save',
+          fun(Changed, _M) ->
+                  lists:keyfind(counter, 1, Changed)
+          end),
     {ok, Model} = ?MODULE:from_proplist([{counter, 100}]),
-    ?assertEqual({counter, {to_db, 100}}, Model:save()),
-    meck:unload(tq_sqlmodel_runtime).
+    ?assertEqual({counter, {to_db, 100}}, Do(fun() -> Model:save() end)).
 
 -endif.
