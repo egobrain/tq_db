@@ -47,6 +47,8 @@ transform_error(Error) ->
 escape_args(Args) ->
     tq_transform_utils:error_writer_map(fun escape_arg/1, Args).
 
+escape_arg({_Name, null}) ->
+    {ok, null};
 escape_arg({Name, Arg}) when
       Name =:= smallint;
       Name =:= int2;
