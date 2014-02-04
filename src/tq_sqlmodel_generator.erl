@@ -372,18 +372,12 @@ meta_clauses(#db_model{table=Table, fields=Fields}) ->
     DbWFieldsClaues = ?clause([?abstract({db_fields, w})], none,
                               [?list([?atom(F#db_field.name)
                                       || F <- Fields, F#db_field.record#record_field.mode#access_mode.sw])]),
-    [$, | SqlRFields] = lists:flatten([[$,, atom_to_quated_string(F#db_field.name)]
-                                       || F <- Fields, F#db_field.record#record_field.mode#access_mode.sr]),
-    RSqlFieldsClause = ?clause([?abstract({sql, {db_fields, r}})], none,
-                               [?abstract(iolist_to_binary(SqlRFields))]),
-
     lists:flatten([TableClause,
                    IndexesClause,
                    DbTypesClause,
                    DbAliasClause,
                    DbRFieldsClaues,
-                   DbWFieldsClaues,
-                   RSqlFieldsClause]).
+                   DbWFieldsClaues]).
 
 %% Internal helpers.
 function_call({Mod, Fun, FunArgs}, Args) ->
@@ -407,9 +401,6 @@ lambda_function({Mod, Fun}) ->
     ?func(Mod, Fun, 1);
 lambda_function(Fun) ->
     ?func(Fun, 1).
-
-atom_to_quated_string(Atom) ->
-    lists:flatten("\""++atom_to_list(Atom)++"\"").
 
 apply_hooks([], Var) ->
     Var;
