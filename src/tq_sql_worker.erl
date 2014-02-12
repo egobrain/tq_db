@@ -37,7 +37,7 @@ init({Driver, DbArgs}) ->
         {ok, Conn} ->
             {ok, #state{conn=Conn, driver = Driver}};
         {error, Reason} ->
-            {error, Reason}
+            {stop, Reason}
     end.
 
 handle_call({'query', Sql, Args, Constructor}, _From, #state{conn=Conn, driver=Driver}=State) ->
