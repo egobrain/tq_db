@@ -15,7 +15,8 @@ save(Changed, Model) ->
             RFields = Model:'$meta'({db_fields, r}),
             <<$,, Returning/binary>> =
                 << <<$,, (Model:'$meta'({db_alias, F}))/binary>> || F <- RFields>>,
-            Constructor = (element(1, Model)):constructor(RFields),
+            Module = Model:'$meta'(module),
+            Constructor = Module:constructor(RFields),
             Args = [{Model:'$meta'({db_type,F}),V} || {F,V} <- Changed],
             {Sql2, Args2} =
                 case IsNew of
