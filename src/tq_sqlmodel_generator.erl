@@ -93,7 +93,8 @@ build_get(#db_model{
              get=true,
              module=Module,
              fields=Fields,
-             funs=#funs{get=GetName}
+             funs=#funs{get=GetName},
+             pool_name=PoolName
             }) ->
     IndexFields = [F || F <- Fields, F#db_field.is_index =:= true],
     Vars = [?var("Var" ++ integer_to_list(I)) || I <- lists:seq(1, length(IndexFields))],
@@ -110,7 +111,7 @@ build_get(#db_model{
                                      Where2 = string:join(Where, " AND "),
                                      String = ["SELECT @{model}* FROM #", ModuleStr, " as model WHERE ", Where2, " LIMIT 1;"],
                                      ?cases(?apply(tq_runtime_sql, model_query,
-                                                   [?atom(db),
+                                                   [?atom(PoolName),
                                                     ?atom(Module),
                                                     ?abstract(iolist_to_binary(String)),
                                                     ?list(Vars)]),
@@ -131,7 +132,8 @@ build_save(#db_model{
               save=true,
               before_save=BeforeSaveHooks,
               after_save=AfterSaveHooks,
-              funs=#funs{save=SaveName}
+              funs=#funs{save=SaveName},
+              pool_name=PoolName
              } = Model) ->
     BeforeAst = apply_success_hooks(BeforeSaveHooks ++ ['$save_hook'], ?var('Model')),
     BodyAst =
@@ -150,7 +152,8 @@ build_save(#db_model{
     SaveHook= ?function('$save_hook',
                         [?clause([?var('Model')], [],
                                  [?apply(tq_sqlmodel_runtime, save,
-                                         [?apply('$db_changed_fields', [?var('Model')]),
+                                         [?atom(PoolName),
+                                          ?apply('$db_changed_fields', [?var('Model')]),
                                           ?var('Model')])])]),
     ExternalFuns =
         [
@@ -169,13 +172,14 @@ build_save(_Model) ->
 build_find(#db_model{
               find=true,
               module=Module,
-              funs=#funs{find=FindName}
+              funs=#funs{find=FindName},
+              pool_name=PoolName
              }) ->
     Sql = "SELECT @{model}* FROM #" ++ atom_to_list(Module) ++ " as model ",
     FindFun = ?function(FindName,
                         [?clause([?var('Where'), ?var('Args')], none,
                                  [?apply(tq_runtime_sql, model_query,
-                                         [?atom(db), ?atom(Module),
+                                         [?atom(PoolName), ?atom(Module),
                                           ?binary([?abstract(Sql), {?var('Where'), binary}]),
                                           ?var('Args')
                                          ])
@@ -191,7 +195,8 @@ build_delete(#db_model{
                 fields=Fields,
                 before_delete=BeforeHooks,
                 after_delete=AfterHooks,
-                funs=#funs{delete=DeleteName}
+                funs=#funs{delete=DeleteName},
+                pool_name=PoolName
                }) ->
     IndexFields = [F || F <- Fields, F#db_field.is_index =:= true],
     Vars = [?var("Var" ++ integer_to_list(I)) || I <- lists:seq(1, length(IndexFields))],
@@ -212,7 +217,7 @@ build_delete(#db_model{
         end,
     CallDeleteAst =
         ?apply(tq_runtime_sql, model_query,
-               [?atom(db),
+               [?atom(PoolName),
                 ?atom(Module),
                 ?abstract(iolist_to_binary(String)),
                          ?list(Vars)]),

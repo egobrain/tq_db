@@ -1,10 +1,10 @@
 -module(tq_sqlmodel_runtime).
 
--export([save/2,
+-export([save/3,
          success_foldl/2
         ]).
 
-save(Changed, Model) ->
+save(PoolName, Changed, Model) ->
     case {Model:is_new(), Changed} of
         {true, []} ->
             {error, not_changed};
@@ -58,7 +58,7 @@ save(Changed, Model) ->
                                 " RETURNING ", Returning/binary, ";">>,
                         {Sql, Args ++ WhereArgs}
                 end,
-            case tq_sql:'query'(db, Sql2, Args2, Constructor) of
+            case tq_sql:'query'(PoolName, Sql2, Args2, Constructor) of
                 {ok, 1, [Model2]} ->
                     {ok, Model2};
                 {error, _} = Err ->

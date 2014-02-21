@@ -49,6 +49,9 @@ model_option(from_db, NewInitFuns,  #db_model{from_db_funs=InitFuns}=Model) ->
                from_db_funs = InitFuns ++ to_list(NewInitFuns)
               },
     {ok, Model2};
+model_option(pool_name, PoolName, Model) ->
+    Model2 = Model#db_model{pool_name = PoolName},
+    {ok, Model2};
 model_option(table, Table, Model) ->
     Model2 = Model#db_model{table = Table},
     {ok, Model2};
@@ -84,6 +87,7 @@ model_option(_Option, _Val, _Model) ->
 
 normalize_model(Model) ->
     Rules = [
+             fun default_pool_name_rule/1,
              fun stores_in_db_rule/1,
              fun table_quoted_rule/1
             ],
@@ -148,6 +152,12 @@ meta_clauses(_) -> [].
 
 
 %% Model rules.
+
+default_pool_name_rule(#db_model{pool_name=undefined}=Model) ->
+    Model2 = Model#db_model{pool_name = db},
+    {ok, Model2};
+default_pool_name_rule(Model) ->
+    {ok, Model}.
 
 stores_in_db_rule(#db_model{table=Table, fields=Fields}=Model) ->
     DbFields = lists:reverse([F || F <- Fields, F#db_field.type =/= undefined]),

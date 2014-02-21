@@ -8,7 +8,10 @@
 -record(db_model, {
           module,
           fields = [],
+
           table,
+          pool_name,
+
           stores_in_db,
 
           %% Generate
