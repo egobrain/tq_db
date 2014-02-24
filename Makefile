@@ -1,4 +1,4 @@
-all:
+build:
 	@rebar compile skip_deps=true
 
 compile:
@@ -10,7 +10,7 @@ deps:
 
 clean:
 	@rebar clean skip_deps=true
-	
+
 clean_all:
 	@rebar clean
 
