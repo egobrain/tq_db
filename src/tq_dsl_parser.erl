@@ -1,4 +1,4 @@
--module(tq_runtime_sql_parser).
+-module(tq_dsl_parser).
 
 -export([
          parse/3

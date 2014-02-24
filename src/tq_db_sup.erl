@@ -1,4 +1,3 @@
-
 -module(tq_db_sup).
 
 -behaviour(supervisor).
@@ -8,9 +7,6 @@
 
 %% Supervisor callbacks
 -export([init/1]).
-
-%% Helper macro for declaring children of supervisor
--define(CHILD(I, Type), {I, {I, start_link, []}, permanent, 5000, Type, [I]}).
 
 %% ===================================================================
 %% API functions
@@ -24,13 +20,4 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, Pools} = application:get_env(tq_db, pools),
-    ParseOptsFun =
-        fun({Name, Driver, SizeArg, WorkerArg}) ->
-                Worker = tq_sql_worker,
-                PoolArgs = [{name, {local, Name}},
-                            {worker_module, Worker}] ++ SizeArg,
-                poolboy:child_spec(Name, PoolArgs, {Driver, WorkerArg})
-        end,
-    PoolSpecs = lists:map(ParseOptsFun, Pools),
-    {ok, { {one_for_one, 5, 10}, PoolSpecs} }.
+    {ok, { {one_for_one, 5, 10}, []} }.

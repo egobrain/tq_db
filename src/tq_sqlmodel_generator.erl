@@ -1,17 +1,3 @@
-%% Copyright (c) 2011-2013, Jakov Kozlov <xazar.studio@gmail.com>
-%%
-%% Permission to use, copy, modify, and/or distribute this software for any
-%% purpose with or without fee is hereby granted, provided that the above
-%% copyright notice and this permission notice appear in all copies.
-%%
-%% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-%% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-%% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-%% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-%% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-%% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-%% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
 -module(tq_sqlmodel_generator).
 
 -include("include/ast_helpers.hrl").
@@ -25,7 +11,6 @@
 -define(atom_join(A, B), list_to_atom(atom_to_list(A) ++ "_" ++ atom_to_list(B))).
 -define(prefix_set(A), ?atom_join(set, A)).
 -define(changed_suffix(A), ?atom_join(A, '$changed')).
-
 
 build_model(Model) ->
     PrepareFuns =
@@ -99,29 +84,20 @@ build_get(#db_model{
     IndexFields = [F || F <- Fields, F#db_field.is_index =:= true],
     Vars = [?var("Var" ++ integer_to_list(I)) || I <- lists:seq(1, length(IndexFields))],
 
+    FV = lists:zip(IndexFields, Vars),
+    IndexFVAst =
+        ?list([?tuple([
+                       ?atom(F#db_field.name),
+                       apply_hooks(F#db_field.to_db_funs, V)
+                      ])
+               || {F, V} <- FV]),
+
     GetFun = ?function(GetName,
                        [?clause(Vars, none,
                                 [
-                                 begin
-                                     ModuleStr = atom_to_list(Module),
-                                     Where = [begin
-                                                  FieldStr = atom_to_list(F#db_field.name),
-                                                  ["${model}", ModuleStr, ".", FieldStr, " = ~", ModuleStr, ".", FieldStr]
-                                              end || F <- IndexFields],
-                                     Where2 = string:join(Where, " AND "),
-                                     String = ["SELECT @{model}* FROM #", ModuleStr, " as model WHERE ", Where2, " LIMIT 1;"],
-                                     ?cases(?apply(tq_runtime_sql, model_query,
-                                                   [?atom(PoolName),
-                                                    ?atom(Module),
-                                                    ?abstract(iolist_to_binary(String)),
-                                                    ?list(Vars)]),
-                                            [?clause([?ok(?list([?var("R")]))], none,
-                                                     [?ok(?var("R"))]),
-                                             ?clause([?ok(?list([]))], none,
-                                                     [?error(?atom(undefined))]),
-                                             ?clause([?error(?var("Reason"))], none,
-                                                     [?error(?var("Reason"))])])
-                                 end
+                                 ?match(?var('Driver'), ?apply(tq_db, get_pool_driver, [?atom(PoolName)])),
+                                 ?match(?var('IndexFV'), IndexFVAst),
+                                 ?apply_(?var('Driver'), get, [?atom(PoolName), ?atom(Module), ?var('IndexFV')])
                                 ])]),
     Export = ?export_fun(GetFun),
     {[Export], [GetFun]};
@@ -130,6 +106,7 @@ build_get(_Model) ->
 
 build_save(#db_model{
               save=true,
+              module=Module,
               before_save=BeforeSaveHooks,
               after_save=AfterSaveHooks,
               funs=#funs{save=SaveName},
@@ -151,10 +128,21 @@ build_save(#db_model{
     SaveFun = ?function(SaveName, [?clause([?var('Model')], none, BodyAst)]),
     SaveHook= ?function('$save_hook',
                         [?clause([?var('Model')], [],
-                                 [?apply(tq_sqlmodel_runtime, save,
-                                         [?atom(PoolName),
-                                          ?apply('$db_changed_fields', [?var('Model')]),
-                                          ?var('Model')])])]),
+                                 [
+                                  ?match(?var('Driver'), ?apply(tq_db, get_pool_driver, [?atom(PoolName)])),
+                                  ?match(?var('ChangedFV'), ?apply('$db_changed_fields', [?var('Model')])),
+                                  ?cases(?apply_(?var('Model'), is_new, []),
+                                         [?clause([?atom(true)], none,
+                                                  [
+                                                   ?apply_(?var('Driver'), insert, [?atom(PoolName), ?atom(Module), ?var('ChangedFV')])
+                                                  ]),
+                                          ?clause([?atom(false)], none,
+                                                  [
+                                                   ?match(?var('IndexFV'), index_fields(?var('Model'),Model)),
+                                                   ?apply_(?var('Driver'), update, [?atom(PoolName), ?atom(Module), ?var('ChangedFV'), ?var('IndexFV')])
+                                                  ])
+                                         ])
+                                 ])]),
     ExternalFuns =
         [
          SaveFun
@@ -175,15 +163,13 @@ build_find(#db_model{
               funs=#funs{find=FindName},
               pool_name=PoolName
              }) ->
-    Sql = "SELECT @{model}* FROM #" ++ atom_to_list(Module) ++ " as model ",
-    FindFun = ?function(FindName,
-                        [?clause([?var('Where'), ?var('Args')], none,
-                                 [?apply(tq_runtime_sql, model_query,
-                                         [?atom(PoolName), ?atom(Module),
-                                          ?binary([?abstract(Sql), {?var('Where'), binary}]),
-                                          ?var('Args')
-                                         ])
-                                 ])]),
+    FindFun =
+        ?function(FindName,
+                  [?clause([?var('Query'), ?var('QueryArgs')], none,
+                           [
+                            ?match(?var('Driver'), ?apply(tq_db, get_pool_driver, [?atom(PoolName)])),
+                            ?apply_(?var('Driver'), find, [?atom(PoolName), ?atom(Module), ?var('Query'), ?var('QueryArgs')])
+                           ])]),
     Export = ?export_fun(FindFun),
     {[Export], [FindFun]};
 build_find(_Model) ->
@@ -192,80 +178,63 @@ build_find(_Model) ->
 build_delete(#db_model{
                 delete=true,
                 module=Module,
-                fields=Fields,
                 before_delete=BeforeHooks,
                 after_delete=AfterHooks,
                 funs=#funs{delete=DeleteName},
                 pool_name=PoolName
-               }) ->
-    IndexFields = [F || F <- Fields, F#db_field.is_index =:= true],
-    Vars = [?var("Var" ++ integer_to_list(I)) || I <- lists:seq(1, length(IndexFields))],
-    ModuleStr = atom_to_list(Module),
-    Where =
-        [begin
-             FieldStr = atom_to_list(F#db_field.name),
-             ["$", ModuleStr, ".", FieldStr, " = ~", ModuleStr, ".", FieldStr]
-         end || F <- IndexFields],
-    Where2 = string:join(Where, " AND "),
-    String = ["DELETE FROM #", ModuleStr, " WHERE ", Where2, ";"],
-    MatchVars =
-        fun(VarM) ->
-                ?match(?record(Module,
-                               [?field(F#db_field.name, V)
-                                || {V, F} <- lists:zip(Vars, IndexFields)]),
-                       VarM)
-        end,
-    CallDeleteAst =
-        ?apply(tq_runtime_sql, model_query,
-               [?atom(PoolName),
-                ?atom(Module),
-                ?abstract(iolist_to_binary(String)),
-                         ?list(Vars)]),
-    ReturnOkAst =
-        fun(Ast) ->
-                ?cases(Ast,
-                       [
-                        ?clause([?ok(?underscore)], none, [?atom(ok)]),
-                        ?clause([?match(?error(?var('_Reason')), ?var('Err'))], none, [?var('Err')])
-                       ])
+               } = Model) ->
+
+    DeleteAstFun =
+        fun(Var) ->
+                [
+                 ?match(?var('Driver'), ?apply(tq_db, get_pool_driver, [?atom(PoolName)])),
+                 ?match(?var('IndexFV'), index_fields(Var, Model)),
+                 ?apply_(?var('Driver'), delete, [?atom(PoolName), ?atom(Module), ?var('IndexFV')])
+                ]
         end,
 
     DeleteFunBody =
         case BeforeHooks =:= [] andalso AfterHooks =:= [] of
             true ->
-                [
-                 MatchVars(?var('Model')),
-                 ReturnOkAst(CallDeleteAst)
-                ];
+                DeleteAstFun(?var('Model'));
             false ->
                 LambdasListAst =
                     ?list(
                        lists:flatten(
                          [
                           [lambda_function(F) || F <- BeforeHooks],
-                      ?func([?clause([?var('M')], none,
-                                     [
-                                      MatchVars(?var('M')),
-                                      CallDeleteAst
-                                     ])]),
+                          ?func([?clause([?var('M')], none,
+                                         DeleteAstFun(?var('M')))]),
                           [lambda_function(F) || F <- AfterHooks]
                          ])
                       ),
-                FoldlAst = ?apply(tq_sqlmodel_runtime, success_foldl,
-                              [
-                               ?var('Model'),
-                               LambdasListAst
-                              ]),
-                [ReturnOkAst(FoldlAst)]
+                FoldlAst = ?apply(tq_db_utils, success_foldl,
+                                  [
+                                   ?var('Model'),
+                                   LambdasListAst
+                                  ]),
+                [?cases(FoldlAst,
+                        [
+                         ?clause([?ok(?underscore)], none, [?atom(ok)]),
+                         ?clause([?match(?error(?var('_Reason')), ?var('Err'))], none, [?var('Err')])
+                        ])]
         end,
-
     DeleteFun =
         ?function(DeleteName, [?clause([?var('Model')], none, DeleteFunBody)]),
-
     Export = ?export_fun(DeleteFun),
     {[Export], [DeleteFun]};
 build_delete(_Model) ->
     {[], []}.
+
+
+index_fields(Var, #db_model{module=Module, fields=Fields}) ->
+    ?list([?tuple([
+                   ?atom(F#db_field.name),
+                   apply_hooks(
+                     F#db_field.to_db_funs,
+                     ?access(Var, Module, F#db_field.name))
+                  ])
+           || F <- Fields, F#db_field.is_index =:= true]).
 
 build_internal_functions(Model) ->
     Funs = [
@@ -356,7 +325,6 @@ db_changed_fields_function(#db_model{module=Module, fields=Fields}) ->
                                     ?var('Changed')]
                                   )])]).
 
-
 meta_clauses(#db_model{table=Table, fields=Fields}) ->
     TableClause = ?clause([?atom(table)], none,
                           [?abstract(Table)]),
@@ -419,7 +387,7 @@ apply_success_hooks([], Var) ->
 apply_success_hooks([Fun], Var) ->
     function_call(Fun, [Var]);
 apply_success_hooks(Funs, Var) ->
-    ?apply(tq_sqlmodel_runtime, success_foldl,
+    ?apply(tq_db_utils, success_foldl,
            [Var, ?list([lambda_function(F) || F <- Funs])]).
 
 list_to_abstract(List) ->

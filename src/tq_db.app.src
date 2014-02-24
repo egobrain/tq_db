@@ -1,7 +1,7 @@
 {application, tq_db,
  [
-  {description, ""},
-  {vsn, "0.3.3"},
+  {description, "tq_transform plugin for storing generated models in database"},
+  {vsn, "0.4.0"},
   {registered, []},
   {applications, [
                   kernel,

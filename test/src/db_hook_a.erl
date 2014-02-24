@@ -49,12 +49,16 @@ after_delete(Tag, _Model) ->
 
 save_test() ->
     put(save, []),
-    {ok, _Model} = test_utils:save(?MODULE:new()),
+    test_utils:fake_driver(),
+    Model = ?MODULE:new(),
+    {ok, _Model} = Model:save(),
     ?assertEqual(lists:reverse(get(save)), [{a, 1}]).
 
 delete_test() ->
     put(delete, []),
-    ok = test_utils:delete(?MODULE:new()),
+    test_utils:fake_driver(),
+    Model = ?MODULE:new(),
+    ok = Model:delete(),
     ?assertEqual(lists:reverse(get(delete)), [{a, 1}]).
 
 -endif.

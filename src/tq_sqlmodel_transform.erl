@@ -1,12 +1,3 @@
-%%
-%% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-%% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-%% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-%% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-%% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-%% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-%% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
 -module(tq_sqlmodel_transform).
 
 -behavior(tq_transform_plugin).
@@ -17,7 +8,8 @@
 
 -export([parse_transform/2]).
 
--export([create_model/1,
+-export([
+         create_model/1,
          model_option/3,
          normalize_model/1,
          set_globals/2,
@@ -241,8 +233,3 @@ is_quated(A) ->
 to_list(A) when is_list(A) ->
     A;
 to_list(A) -> [A].
-
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
-
--endif.

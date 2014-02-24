@@ -5,6 +5,7 @@
 %% Test
 -field({counter,
         [
+         index,
          required,
          {type, integer},
          {db_type, integer},
@@ -27,8 +28,7 @@
 -model([
         {table, <<"test">>},
         {generate, [get, save, delete, find]},
-        {from_db, [init1,
-                init2]}
+        {from_db, [init1, init2]}
        ]).
 
 init1(Model) ->
@@ -36,7 +36,7 @@ init1(Model) ->
         undefined ->
             Model;
         Counter ->
-            Model#?MODULE{counter = Counter*3}
+            Model#?MODULE{counter = {init1, Counter}}
     end.
 
 init2(Model) ->
@@ -44,13 +44,13 @@ init2(Model) ->
         undefined ->
             Model;
         Counter ->
-            Model#?MODULE{counter = Counter*10}
+            Model#?MODULE{counter = {init2, Counter}}
     end.
 
 field_init1(FieldVal) ->
-    FieldVal*3.
+    {field_init1, FieldVal}.
 field_init2(FieldVal) ->
-    FieldVal*10.
+    {field_init2, FieldVal}.
 
 to_db(Value) ->
     {to_db, Value}.
@@ -65,23 +65,21 @@ from_db_test_() ->
                    }
         end,
     [fun() -> ?assertEqual(C(undefined), (constructor([]))([])) end,
-     fun() -> ?assertEqual(C(150), (constructor([counter]))([5])) end].
+     fun() -> ?assertEqual(C({init2,{init1,5}}), (constructor([counter]))([5])) end].
 
 from_db_field_test_() ->
     G = fun(M) ->
                 M:from_db_field()
         end,
-    [fun() -> ?assertEqual(undefined, G((constructor([]))([]))) end,
-     fun() -> ?assertEqual(150, G((constructor([from_db_field]))([5]))) end].
+    [fun() -> ?assertEqual(undefined,
+                           G((constructor([]))([]))) end,
+     fun() -> ?assertEqual({field_init2,{field_init1,5}},
+                           G((constructor([from_db_field]))([5]))) end].
 
 to_db_test() ->
-    Do =
-        test_utils:stumb_mf(
-          tq_sqlmodel_runtime, 'save',
-          fun(Changed, _M) ->
-                  lists:keyfind(counter, 1, Changed)
-          end),
+    test_utils:fake_driver(),
     {ok, Model} = ?MODULE:from_proplist([{counter, 100}]),
-    ?assertEqual({counter, {to_db, 100}}, Do(fun() -> Model:save() end)).
+    {ok, Model2} = Model:save(),
+    ?assertEqual({init2,{init1,{to_db,100}}}, Model2:counter()).
 
 -endif.
