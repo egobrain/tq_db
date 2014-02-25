@@ -308,9 +308,12 @@ field_constructor_function(#db_model{fields=Fields, module=Module}) ->
 
 db_changed_fields_function(#db_model{module=Module, fields=Fields}) ->
     ListAst = ?list([?tuple([?atom(F#db_field.name),
-                             apply_hooks(
-                               F#db_field.to_db_funs,
-                               ?access(?var('Model'), Module, F#db_field.name)),
+                             ?func([?clause([], none,
+                                            [
+                                             apply_hooks(
+                                               F#db_field.to_db_funs,
+                                               ?access(?var('Model'), Module, F#db_field.name))
+                                            ])]),
                              ?access(?var('Model'), Module, ?changed_suffix(F#db_field.name))
                             ])
                      || F <- Fields,
@@ -319,10 +322,9 @@ db_changed_fields_function(#db_model{module=Module, fields=Fields}) ->
                         F#db_field.record#record_field.mode#access_mode.sw]),
     ?function('$db_changed_fields',
               [?clause([?var('Model')], none,
-                       [?list_comp(?tuple([?var('Name'), ?var('Val')]),
-                                   [?generator(?tuple([?var('Name'), ?var('Val'), ?var('Changed')]),
-                                               ListAst),
-                                    ?var('Changed')]
+                       [?list_comp(?tuple([?var('Name'), ?apply_(?var('Val'), [])]),
+                                   [?generator(?tuple([?var('Name'), ?var('Val'),?atom(true)]),
+                                               ListAst)]
                                   )])]).
 
 meta_clauses(#db_model{table=Table, fields=Fields}) ->
