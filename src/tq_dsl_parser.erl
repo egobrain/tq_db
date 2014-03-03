@@ -147,7 +147,7 @@ parse_type(Bin, State, Next) ->
                   token(Rest, State2,
                         fun(<<>>, _Rest2, State3) ->
                                 {error, {wrong_format, {State3#state.pos+1, "Field name required"}}};
-                            (Token2, Rest2, State3) ->
+                           (Token2, Rest2, State3) ->
                                 Next({field_type, State#state.pos+1, {Token, Token2}}, Rest2, ?INC_POS(State3, 1))
                         end);
              (Token, Rest, State2) ->
@@ -169,17 +169,24 @@ parse_alias(<<${, Rest/binary>>, State, Next) ->
 parse_alias(Bin, State, Next) ->
     parse_alias_(Bin, State, Next).
 
+parse_alias_(<<$*, Rest/binary>>, State, Next) ->
+    Next({field_alias, State#state.pos+1, '*'}, Rest, ?INC_POS(State, 1));
 parse_alias_(Bin, State, Next) ->
     token(Bin, State,
           fun(<<>>, _Rest, State2) ->
                   {error, {wrong_format, {State2#state.pos+1, "Model name required"}}};
              (Model, <<$., Rest/binary>>, State2) ->
-                  token(Rest, State2,
-                        fun(<<>>, _Rest2, State3) ->
-                                {error, {wrong_format, {State3#state.pos+2, "Field name required"}}};
-                           (Field, Rest2, State3) ->
-                                Next({field_alias, State#state.pos+1, {Model, Field}}, Rest2, ?INC_POS(State3, 1))
-                        end);
+                  case Rest of
+                      <<$*, Rest2/binary>> ->
+                          Next({field_alias, State#state.pos+1, {Model, '*'}}, Rest2, ?INC_POS(State2, 2));
+                      _ ->
+                          token(Rest, State2,
+                                fun(<<>>, _Rest2, State3) ->
+                                        {error, {wrong_format, {State3#state.pos+2, "Field name required"}}};
+                                   (Field, Rest2, State3) ->
+                                        Next({field_alias, State#state.pos+1, {Model, Field}}, Rest2, ?INC_POS(State3, 1))
+                                end)
+                  end;
              (Field, Rest, State2) ->
                   Next({field_alias, State#state.pos+1, Field}, Rest, State2)
           end).
@@ -269,6 +276,9 @@ parsers_test_() ->
          {<<"$field">>, [{field_alias, 2, <<"field">>}]},
          {<<"$model.field">>, [{field_alias, 2, {<<"model">>, <<"field">>}}]},
 
+         {<<"$*">>, [{field_alias, 2, '*'}]},
+         {<<"$model.*">>, [{field_alias, 2, {<<"model">>, '*'}}]},
+
          {<<"@*">>, [{field_query_alias, 2, '*'}]},
          {<<"@...">>, [{field_query_alias, 2, '...'}]},
          {<<"@field">>, [{field_query_alias, 2, <<"field">>}]},
@@ -296,6 +306,8 @@ table_link_test_() ->
         [
          {<<"${tab}field">>, [{table_link, 3, <<"tab">>, {field_alias, 7, <<"field">>}}]},
          {<<"${tab}model.field">>, [{table_link, 3, <<"tab">>, {field_alias, 7, {<<"model">>, <<"field">>}}}]},
+         {<<"${tab}*">>, [{table_link, 3, <<"tab">>, {field_alias, 7, '*'}}]},
+         {<<"${tab}model.*">>, [{table_link, 3, <<"tab">>, {field_alias, 7, {<<"model">>, '*'}}}]},
 
          {<<"@{tab}*">>, [{table_link, 3, <<"tab">>, {field_query_alias, 7, '*'}}]},
          {<<"@{tab}...">>, [{table_link, 3, <<"tab">>, {field_query_alias, 7, '...'}}]},
@@ -342,8 +354,6 @@ errors_test_() ->
     Tests =
         [
          {<<"$...">>, 2},
-         {<<"$*">>, 2},
-         {<<"$m.*">>, 4},
          {<<"@m. ">>, 4},
          {<<"@ ">>, 2},
          {<<"#...">>, 2},
