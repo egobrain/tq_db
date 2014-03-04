@@ -107,12 +107,13 @@ build_get(_Model) ->
 build_save(#db_model{
               save=true,
               module=Module,
+              fields=Fields,
               before_save=BeforeSaveHooks,
               after_save=AfterSaveHooks,
               funs=#funs{save=SaveName},
               pool_name=PoolName
              } = Model) ->
-    BeforeAst = apply_success_hooks(BeforeSaveHooks ++ ['$save_hook'], ?var('Model')),
+    BeforeAst = apply_success_hooks(BeforeSaveHooks ++ [{'$save_hook', [?var('Opts')]}], ?var('Model')),
     BodyAst =
         case append_functions_args(AfterSaveHooks, [?var('Model')]) of
             [] ->
@@ -125,27 +126,56 @@ build_save(#db_model{
                                  [?error(?var('Reason'))])
                         ])]
         end,
-    SaveFun = ?function(SaveName, [?clause([?var('Model')], none, BodyAst)]),
-    SaveHook= ?function('$save_hook',
-                        [?clause([?var('Model')], [],
-                                 [
-                                  ?match(?var('Driver'), ?apply(tq_db, get_pool_driver, [?atom(PoolName)])),
-                                  ?match(?var('ChangedFV'), ?apply('$db_changed_fields', [?var('Model')])),
-                                  ?cases(?apply_(?var('Model'), is_new, []),
-                                         [?clause([?atom(true)], none,
-                                                  [
-                                                   ?apply_(?var('Driver'), insert, [?atom(PoolName), ?atom(Module), ?var('ChangedFV')])
-                                                  ]),
-                                          ?clause([?atom(false)], none,
-                                                  [
-                                                   ?match(?var('IndexFV'), index_fields(?var('Model'),Model)),
-                                                   ?apply_(?var('Driver'), update, [?atom(PoolName), ?atom(Module), ?var('ChangedFV'), ?var('IndexFV')])
-                                                  ])
-                                         ])
-                                 ])]),
+    SaveFun =
+        ?function(SaveName,
+                  [?clause([?var('Model')], none,
+                           [?apply(SaveName, [?list([]), ?var('Model')])])]),
+    SaveFun2 =
+        ?function(SaveName,
+                  [?clause([?var('Opts'), ?var('Model')], none, BodyAst)]),
+
+    ForcedListAst =
+        ?list_comp(
+            ?var('E'),
+            [?generator(
+                ?match(?tuple([?var('_Name'), ?var('Val')]), ?var('E')),
+                ?list([?tuple([?atom(F#db_field.name),
+                               apply_hooks(
+                                 F#db_field.to_db_funs,
+                                 ?access(?var('Model'), Module, F#db_field.name))
+                              ])
+                       || F <- Fields,
+                          F#db_field.record#record_field.stores_in_record,
+                          F#db_field.record#record_field.setter,
+                          F#db_field.record#record_field.mode#access_mode.sw])),
+             ?neq(?var('Val'), ?atom('undefined'))]),
+    SaveHook =
+        ?function('$save_hook',
+                  [?clause([?var('Opts'), ?var('Model')], none,
+                           [
+                            ?match(?var('Driver'), ?apply(tq_db, get_pool_driver, [?atom(PoolName)])),
+                            ?match(?var('ChangedFV'),
+                                   ?cases(?apply(lists, member, [?atom(force), ?var('Opts')]),
+                                          [?clause([?atom(true)], none,
+                                                   [ForcedListAst]),
+                                           ?clause([?atom(false)], none,
+                                                   [?apply('$db_changed_fields', [?var('Model')])])])),
+                            ?cases(?apply_(?var('Model'), is_new, []),
+                                   [?clause([?atom(true)], none,
+                                            [
+                                             ?apply_(?var('Driver'), insert, [?atom(PoolName), ?atom(Module), ?var('ChangedFV')])
+                                            ]),
+                                    ?clause([?atom(false)], none,
+                                            [
+                                             ?match(?var('IndexFV'), index_fields(?var('Model'),Model)),
+                                             ?apply_(?var('Driver'), update, [?atom(PoolName), ?atom(Module), ?var('ChangedFV'), ?var('IndexFV')])
+                                            ])
+                                   ])
+                           ])]),
     ExternalFuns =
         [
-         SaveFun
+         SaveFun,
+         SaveFun2
         ],
     InternalFuns =
         [

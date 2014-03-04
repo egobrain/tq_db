@@ -38,6 +38,8 @@ insert(_PoolName, Module, ChangedFV) ->
     Model = Constructor(Values),
     {ok, Model}.
 
+update(_PoolName, _Module, [], _IndexFV) ->
+    {error, not_modified};
 update(_PoolName, Module, ChangedFV, IndexFV) ->
     {Fields1, Values1} = lists:unzip(ChangedFV),
     {Fields2, Values2} = lists:unzip(IndexFV),
