@@ -49,6 +49,18 @@ parse(<<Quote, Rest/binary>>, StrAcc, StrPos, Acc, State) when
       fun(String, Rest2, State2) ->
               parse(Rest2, <<StrAcc/binary, Quote, String/binary, Quote>>, StrPos, Acc, ?INC_POS(State2, 1))
       end);
+parse(<<"$#", Rest/binary>>, StrAcc, StrPos, Acc, #state{joiner=Join}=State) ->
+    parse_full_alias(
+      Rest, ?INC_POS(State, 2),
+      fun(Alias, Rest2, State2) ->
+              Join({string, StrPos, StrAcc}, Acc,
+                   fun(Acc2) ->
+                           Join(Alias, Acc2,
+                                fun(Acc3) ->
+                                        parse(Rest2, <<>>, State2#state.pos+1, Acc3,State2)
+                                end)
+                   end)
+      end);
 parse(<<$$, Rest/binary>>, StrAcc, StrPos, Acc, #state{joiner=Join}=State) ->
     parse_alias(
       Rest, ?INC_POS(State, 1),
@@ -87,6 +99,18 @@ parse(<<$#, Rest/binary>>, StrAcc, StrPos, Acc, #state{joiner=Join}=State) ->
       end);
 parse(<<$@, _Rest/binary>>, _StrAcc, _StrPos, _Acc, #state{brace_mode=true}=State) ->
     {error, {wrong_format, {State#state.pos+1, "Field quering not allowed in another field quering"}}};
+parse(<<"@#", Rest/binary>>, StrAcc, StrPos, Acc, #state{joiner=Join}=State) ->
+    parse_full_fq(
+      Rest, ?INC_POS(State, 2),
+      fun(Qf, Rest2, State2) ->
+              Join({string, StrPos, StrAcc}, Acc,
+                   fun(Acc2) ->
+                           Join(Qf, Acc2,
+                                fun(Acc3) ->
+                                        parse(Rest2, <<>>, State2#state.pos+1, Acc3, State2)
+                                end)
+                   end)
+      end);
 parse(<<$@, Rest/binary>>, StrAcc, StrPos, Acc, #state{joiner=Join}=State) ->
     parse_fq(
       Rest, ?INC_POS(State, 1),
@@ -154,6 +178,28 @@ parse_type(Bin, State, Next) ->
                   Next({field_type, State#state.pos+1, Token}, Rest, State2)
           end).
 
+parse_full_alias(<<$*, Rest/binary>>, State, Next) ->
+    Next({field_full_alias, State#state.pos+1, '*'}, Rest, ?INC_POS(State, 1));
+parse_full_alias(Bin, State, Next) ->
+    token(Bin, State,
+          fun(<<>>, _Rest, State2) ->
+                  {error, {wrong_format, {State2#state.pos+1, "Model name required"}}};
+             (Model, <<$., Rest/binary>>, State2) ->
+                  case Rest of
+                      <<$*, Rest2/binary>> ->
+                          Next({field_full_alias, State#state.pos+1, {Model, '*'}}, Rest2, ?INC_POS(State2, 2));
+                      _ ->
+                          token(Rest, State2,
+                                fun(<<>>, _Rest2, State3) ->
+                                        {error, {wrong_format, {State3#state.pos+2, "Field name required"}}};
+                                   (Field, Rest2, State3) ->
+                                        Next({field_full_alias, State#state.pos+1, {Model, Field}}, Rest2, ?INC_POS(State3, 1))
+                                end)
+                  end;
+             (Field, Rest, State2) ->
+                  Next({field_full_alias, State#state.pos+1, Field}, Rest, State2)
+          end).
+
 parse_alias(<<${, Rest/binary>>, State, Next) ->
     token(Rest, ?INC_POS(State, 1),
           fun(<<>>, _Rest2, _State2) ->
@@ -201,6 +247,38 @@ parse_string(Quote, <<Ch, Rest/binary>>, Acc, State, Next) ->
     parse_string(Quote, Rest, <<Acc/binary, Ch>>, ?INC_POS(State, 1), Next);
 parse_string(_Quote, <<>>, _Acc, State, _Next) ->
     {error, {wrong_format, {State#state.pos+1, "Unclosed string quate"}}}.
+
+parse_full_fq(<<$*, Rest/binary>>, State, Next) ->
+    Next({field_query_full_alias, State#state.pos+1, '*'}, Rest, ?INC_POS(State, 1));
+parse_full_fq(<<"...", Rest/binary>>, State, Next) ->
+    Next({field_query_full_alias, State#state.pos+1, '...'}, Rest, ?INC_POS(State, 3));
+parse_full_fq(Bin, State, Next) ->
+    GoNext =
+        fun(_FQ, <<$(, _R/binary>>, S) ->
+                {error, {wrong_format, {S#state.pos+1, "No braces allowed in full alias query"}}};
+           (FQ, R, S) ->
+                Next(FQ, R, S)
+        end,
+    token(Bin, State,
+          fun(<<>>, _Rest, State2) ->
+                  {error, {wrong_format, {State2#state.pos+1, "Model name required"}}};
+             (Model, <<$., Rest/binary>>, State2) ->
+                  case Rest of
+                      <<$*, Rest2/binary>> ->
+                          Next({field_query_full_alias, State#state.pos+1, {Model, '*'}}, Rest2, ?INC_POS(State2,2));
+                      <<"..", Rest2/binary>> ->
+                          Next({field_query_full_alias, State#state.pos+1, {Model, '...'}}, Rest2,  ?INC_POS(State2,3));
+                      _ ->
+                          token(Rest, State2,
+                                fun(<<>>, _Rest2, State3) ->
+                                        {error, {wrong_format, {State3#state.pos+2, "Field name required"}}};
+                                   (Field, Rest2, State3) ->
+                                        GoNext({field_query_full_alias, State#state.pos+1, {Model, Field}}, Rest2,  ?INC_POS(State3,1))
+                                end)
+                  end;
+             (Field, Rest, State2) ->
+                  GoNext({field_query_full_alias, State#state.pos+1, Field}, Rest, State2)
+          end).
 
 parse_fq(<<${, Rest/binary>>, State, Next) ->
     token(Rest, ?INC_POS(State, 1),
@@ -275,9 +353,13 @@ parsers_test_() ->
 
          {<<"$field">>, [{field_alias, 2, <<"field">>}]},
          {<<"$model.field">>, [{field_alias, 2, {<<"model">>, <<"field">>}}]},
-
          {<<"$*">>, [{field_alias, 2, '*'}]},
          {<<"$model.*">>, [{field_alias, 2, {<<"model">>, '*'}}]},
+
+         {<<"$#field">>, [{field_full_alias, 3, <<"field">>}]},
+         {<<"$#model.field">>, [{field_full_alias, 3, {<<"model">>, <<"field">>}}]},
+         {<<"$#*">>, [{field_full_alias, 3, '*'}]},
+         {<<"$#model.*">>, [{field_full_alias, 3, {<<"model">>, '*'}}]},
 
          {<<"@*">>, [{field_query_alias, 2, '*'}]},
          {<<"@...">>, [{field_query_alias, 2, '...'}]},
@@ -285,10 +367,17 @@ parsers_test_() ->
          {<<"@model.field">>, [{field_query_alias, 2, {<<"model">>, <<"field">>}}]},
          {<<"@model.*">>, [{field_query_alias, 2, {<<"model">>, '*'}}]},
          {<<"@model...">>, [{field_query_alias, 2, {<<"model">>, '...'}}]},
-         {<<"@field(123)">>, [{field_query, 2, <<"field">>},
-                              {string, 8, <<"123">>}]},
+         {<<"@field(123)">>, [{field_query, 2, <<"field">>}, {string, 8, <<"123">>}]},
          {<<"@model.field(123)">>, [{field_query, 2, {<<"model">>, <<"field">>}},
                                     {string, 14, <<"123">>}]},
+
+         {<<"@#*">>, [{field_query_full_alias, 3, '*'}]},
+         {<<"@#...">>, [{field_query_full_alias, 3, '...'}]},
+         {<<"@#field">>, [{field_query_full_alias, 3, <<"field">>}]},
+         {<<"@#model.field">>, [{field_query_full_alias, 3, {<<"model">>, <<"field">>}}]},
+         {<<"@#model.*">>, [{field_query_full_alias, 3, {<<"model">>, '*'}}]},
+         {<<"@#model...">>, [{field_query_full_alias, 3, {<<"model">>, '...'}}]},
+
          {<<"~field">>, [{field_type, 2, <<"field">>}]},
          {<<"~model.field">>, [{field_type, 2, {<<"model">>, <<"field">>}}]},
 
@@ -353,14 +442,21 @@ qf_inner_test_() ->
 errors_test_() ->
     Tests =
         [
+         {<<"$">>, 2},
          {<<"$...">>, 2},
+         {<<"$#">>, 3},
+         {<<"$#...">>, 3},
          {<<"@m. ">>, 4},
+         {<<"@#m. ">>, 5},
          {<<"@ ">>, 2},
+         {<<"@# ">>, 3},
          {<<"#...">>, 2},
          {<<"#*">>, 2},
          {<<"#{tab}">>, 2},
          {<<"@{tab}">>, 7},
+         {<<"@#{tab}">>, 3},
          {<<"${tab}">>, 7},
+         {<<"$#{tab}">>, 3},
          {<<"@{tab}f(~f2">>, 12},
          {<<"@{tab}f(~f2*(12+12)">>, 20},
          {<<"@{tab}f(@f2)">>, 9},
