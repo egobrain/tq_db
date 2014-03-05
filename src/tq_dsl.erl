@@ -1,8 +1,9 @@
 -module(tq_dsl).
 
 -export([
-         'query'/4,
-         model_query/4
+         model_query/4,
+         model_query/5,
+         'query'/4
         ]).
 
 model_query(PoolName, Model, Query, QueryArgs) ->
@@ -11,6 +12,15 @@ model_query(PoolName, Model, Query, QueryArgs) ->
         {ok, {Sql, Fields, DbTypes}} ->
             Args = lists:zipwith(fun(W, F) -> W(F) end, DbTypes, QueryArgs),
             Driver:'query'(PoolName, Sql, Args, Model:constructor(Fields));
+        {error, _Reason} = Err -> Err
+    end.
+
+model_query(PoolName, Model, Query, QueryArgs, Constructor) ->
+    Driver = tq_db:get_pool_driver(PoolName),
+    case Driver:parse(Model, Query) of
+        {ok, {Sql, Fields, DbTypes}} ->
+            Args = lists:zipwith(fun(W, F) -> W(F) end, DbTypes, QueryArgs),
+            Driver:'query'(PoolName, Sql, Args, Constructor(Fields));
         {error, _Reason} = Err -> Err
     end.
 
