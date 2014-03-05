@@ -373,6 +373,7 @@ meta_clauses(#db_model{table=Table, fields=Fields}) ->
     DbRFieldsClaues = ?clause([?abstract({db_fields, r})], none,
                               [?list([?atom(F#db_field.name)
                                       || F <- Fields,
+                                         not F#db_field.select_prevented,
                                          F#db_field.record#record_field.mode#access_mode.sr])]),
     DbWFieldsClaues = ?clause([?abstract({db_fields, w})], none,
                               [?list([?atom(F#db_field.name)

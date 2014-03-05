@@ -39,6 +39,7 @@
           type,
           alias,
           is_index = false,
+          select_prevented = false,
           record,
 
           from_db_funs = [] :: atom() | {atom(), atom()} | {atom(), list()} | {atom(), atom(), list()},

@@ -123,6 +123,11 @@ field_option(to_db, NewInitFuns, #db_field{to_db_funs=InitFuns}=Field) ->
                to_db_funs = InitFuns ++ to_list(NewInitFuns)
               },
     {ok, Field2};
+field_option(prevent_select, PreventSelect, Field) ->
+    Field2 = Field#db_field{
+               select_prevented = PreventSelect
+              },
+    {ok, Field2};
 field_option(_Option, _Val, _Field) ->
     false.
 
