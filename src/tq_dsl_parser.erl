@@ -179,7 +179,7 @@ parse_type(Bin, State, Next) ->
           end).
 
 parse_full_alias(<<$*, Rest/binary>>, State, Next) ->
-    Next({field_full_alias, State#state.pos+1, '*'}, Rest, ?INC_POS(State, 1));
+    Next({field_alias, State#state.pos+1, table, '*'}, Rest, ?INC_POS(State, 1));
 parse_full_alias(Bin, State, Next) ->
     token(Bin, State,
           fun(<<>>, _Rest, State2) ->
@@ -187,54 +187,54 @@ parse_full_alias(Bin, State, Next) ->
              (Model, <<$., Rest/binary>>, State2) ->
                   case Rest of
                       <<$*, Rest2/binary>> ->
-                          Next({field_full_alias, State#state.pos+1, {Model, '*'}}, Rest2, ?INC_POS(State2, 2));
+                          Next({field_alias, State#state.pos+1, table, {Model, '*'}}, Rest2, ?INC_POS(State2, 2));
                       _ ->
                           token(Rest, State2,
                                 fun(<<>>, _Rest2, State3) ->
                                         {error, {wrong_format, {State3#state.pos+2, "Field name required"}}};
                                    (Field, Rest2, State3) ->
-                                        Next({field_full_alias, State#state.pos+1, {Model, Field}}, Rest2, ?INC_POS(State3, 1))
+                                        Next({field_alias, State#state.pos+1, table, {Model, Field}}, Rest2, ?INC_POS(State3, 1))
                                 end)
                   end;
              (Field, Rest, State2) ->
-                  Next({field_full_alias, State#state.pos+1, Field}, Rest, State2)
+                  Next({field_alias, State#state.pos+1, table, Field}, Rest, State2)
           end).
 
 parse_alias(<<${, Rest/binary>>, State, Next) ->
     token(Rest, ?INC_POS(State, 1),
           fun(<<>>, _Rest2, _State2) ->
                   {error, {wrong_format, {State#state.pos+1, "Link name required"}}};
-             (TableLink, <<$}, Rest2/binary>>, State2) ->
-                  parse_alias_(Rest2, ?INC_POS(State2, 1),
-                               fun(Qf, Rest3, State3) ->
-                                       Next({table_link, State#state.pos+2, TableLink, Qf}, Rest3, State3)
-                               end);
+             (Link, <<$}, Rest2/binary>>, State2) ->
+                  parse_alias_(Rest2,
+                               {State#state.pos+2, Link},
+                               ?INC_POS(State2, 1),
+                               Next);
              (_TableLink, _Rest2, State2) ->
                   {error, {wrong_format, {State2#state.pos+1, "Close brace '}' required"}}}
           end);
 parse_alias(Bin, State, Next) ->
-    parse_alias_(Bin, State, Next).
+    parse_alias_(Bin, none, State, Next).
 
-parse_alias_(<<$*, Rest/binary>>, State, Next) ->
-    Next({field_alias, State#state.pos+1, '*'}, Rest, ?INC_POS(State, 1));
-parse_alias_(Bin, State, Next) ->
+parse_alias_(<<$*, Rest/binary>>, Link, State, Next) ->
+    Next({field_alias, State#state.pos+1, Link, '*'}, Rest, ?INC_POS(State, 1));
+parse_alias_(Bin, Link, State, Next) ->
     token(Bin, State,
           fun(<<>>, _Rest, State2) ->
                   {error, {wrong_format, {State2#state.pos+1, "Model name required"}}};
              (Model, <<$., Rest/binary>>, State2) ->
                   case Rest of
                       <<$*, Rest2/binary>> ->
-                          Next({field_alias, State#state.pos+1, {Model, '*'}}, Rest2, ?INC_POS(State2, 2));
+                          Next({field_alias, State#state.pos+1, Link, {Model, '*'}}, Rest2, ?INC_POS(State2, 2));
                       _ ->
                           token(Rest, State2,
                                 fun(<<>>, _Rest2, State3) ->
                                         {error, {wrong_format, {State3#state.pos+2, "Field name required"}}};
                                    (Field, Rest2, State3) ->
-                                        Next({field_alias, State#state.pos+1, {Model, Field}}, Rest2, ?INC_POS(State3, 1))
+                                        Next({field_alias, State#state.pos+1, Link, {Model, Field}}, Rest2, ?INC_POS(State3, 1))
                                 end)
                   end;
              (Field, Rest, State2) ->
-                  Next({field_alias, State#state.pos+1, Field}, Rest, State2)
+                  Next({field_alias, State#state.pos+1, Link, Field}, Rest, State2)
           end).
 
 parse_string(Quote, Bin, State, Next) ->
@@ -249,9 +249,9 @@ parse_string(_Quote, <<>>, _Acc, State, _Next) ->
     {error, {wrong_format, {State#state.pos+1, "Unclosed string quate"}}}.
 
 parse_full_fq(<<$*, Rest/binary>>, State, Next) ->
-    Next({field_query_full_alias, State#state.pos+1, '*'}, Rest, ?INC_POS(State, 1));
+    Next({field_query_alias, State#state.pos+1, table, '*'}, Rest, ?INC_POS(State, 1));
 parse_full_fq(<<"...", Rest/binary>>, State, Next) ->
-    Next({field_query_full_alias, State#state.pos+1, '...'}, Rest, ?INC_POS(State, 3));
+    Next({field_query_alias, State#state.pos+1, table, '...'}, Rest, ?INC_POS(State, 3));
 parse_full_fq(Bin, State, Next) ->
     GoNext =
         fun(_FQ, <<$(, _R/binary>>, S) ->
@@ -265,41 +265,41 @@ parse_full_fq(Bin, State, Next) ->
              (Model, <<$., Rest/binary>>, State2) ->
                   case Rest of
                       <<$*, Rest2/binary>> ->
-                          Next({field_query_full_alias, State#state.pos+1, {Model, '*'}}, Rest2, ?INC_POS(State2,2));
+                          Next({field_query_alias, State#state.pos+1, table, {Model, '*'}}, Rest2, ?INC_POS(State2,2));
                       <<"..", Rest2/binary>> ->
-                          Next({field_query_full_alias, State#state.pos+1, {Model, '...'}}, Rest2,  ?INC_POS(State2,3));
+                          Next({field_query_alias, State#state.pos+1, table, {Model, '...'}}, Rest2,  ?INC_POS(State2,3));
                       _ ->
                           token(Rest, State2,
                                 fun(<<>>, _Rest2, State3) ->
                                         {error, {wrong_format, {State3#state.pos+2, "Field name required"}}};
                                    (Field, Rest2, State3) ->
-                                        GoNext({field_query_full_alias, State#state.pos+1, {Model, Field}}, Rest2,  ?INC_POS(State3,1))
+                                        GoNext({field_query_alias, State#state.pos+1, table, {Model, Field}}, Rest2, ?INC_POS(State3,1))
                                 end)
                   end;
              (Field, Rest, State2) ->
-                  GoNext({field_query_full_alias, State#state.pos+1, Field}, Rest, State2)
+                  GoNext({field_query_alias, State#state.pos+1, table, Field}, Rest, State2)
           end).
 
 parse_fq(<<${, Rest/binary>>, State, Next) ->
     token(Rest, ?INC_POS(State, 1),
           fun(<<>>, _Rest2, _State2) ->
                   {error, {wrong_format, {State#state.pos+1, "Link name required"}}};
-             (TableLink, <<$}, Rest2/binary>>, State2) ->
-                  parse_fq_(Rest2, ?INC_POS(State2, 1),
-                            fun(Qf, Rest3, State3) ->
-                                    Next({table_link, State#state.pos+2, TableLink, Qf}, Rest3, State3)
-                            end);
-             (_TableLink, _Rest2, State2) ->
+             (Link, <<$}, Rest2/binary>>, State2) ->
+                  parse_fq_(Rest2,
+                            {State#state.pos+2, Link},
+                            ?INC_POS(State2, 1),
+                            Next);
+             (_Link, _Rest2, State2) ->
                   {error, {wrong_format, {State2#state.pos+1, "Unclosed brace '}'"}}}
           end);
 parse_fq(Bin, State, Next) ->
-    parse_fq_(Bin, State, Next).
+    parse_fq_(Bin, none, State, Next).
 
-parse_fq_(<<$*, Rest/binary>>, State, Next) ->
-    Next({field_query_alias, State#state.pos+1, '*'}, Rest, ?INC_POS(State, 1));
-parse_fq_(<<"...", Rest/binary>>, State, Next) ->
-    Next({field_query_alias, State#state.pos+1, '...'}, Rest, ?INC_POS(State, 3));
-parse_fq_(Bin, State, Next) ->
+parse_fq_(<<$*, Rest/binary>>, Link, State, Next) ->
+    Next({field_query_alias, State#state.pos+1, Link, '*'}, Rest, ?INC_POS(State, 1));
+parse_fq_(<<"...", Rest/binary>>, Link, State, Next) ->
+    Next({field_query_alias, State#state.pos+1, Link, '...'}, Rest, ?INC_POS(State, 3));
+parse_fq_(Bin, Link, State, Next) ->
     GoNext =
         fun(FQ, <<$(, R/binary>>, S) ->
                 S2 = S#state{pos=S#state.pos+1, braces_cnt=1, brace_mode=true},
@@ -313,19 +313,19 @@ parse_fq_(Bin, State, Next) ->
              (Model, <<$., Rest/binary>>, State2) ->
                   case Rest of
                       <<$*, Rest2/binary>> ->
-                          Next({field_query_alias, State#state.pos+1, {Model, '*'}}, Rest2, ?INC_POS(State2,2));
+                          Next({field_query_alias, State#state.pos+1, Link, {Model, '*'}}, Rest2, ?INC_POS(State2,2));
                       <<"..", Rest2/binary>> ->
-                          Next({field_query_alias, State#state.pos+1, {Model, '...'}}, Rest2,  ?INC_POS(State2,3));
+                          Next({field_query_alias, State#state.pos+1, Link, {Model, '...'}}, Rest2,  ?INC_POS(State2,3));
                       _ ->
                           token(Rest, State2,
                                 fun(<<>>, _Rest2, State3) ->
                                         {error, {wrong_format, {State3#state.pos+2, "Field name required"}}};
                                    (Field, Rest2, State3) ->
-                                        GoNext({State#state.pos+1, {Model, Field}}, Rest2,  ?INC_POS(State3,1))
+                                        GoNext({State#state.pos+1, Link, {Model, Field}}, Rest2, ?INC_POS(State3,1))
                                 end)
                   end;
              (Field, Rest, State2) ->
-                  GoNext({State#state.pos+1, Field}, Rest, State2)
+                  GoNext({State#state.pos+1, Link, Field}, Rest, State2)
           end).
 
 %% =============================================================================
@@ -351,32 +351,32 @@ parsers_test_() ->
         [
          {<<"#table">>, [{table, 2, <<"table">>}]},
 
-         {<<"$field">>, [{field_alias, 2, <<"field">>}]},
-         {<<"$model.field">>, [{field_alias, 2, {<<"model">>, <<"field">>}}]},
-         {<<"$*">>, [{field_alias, 2, '*'}]},
-         {<<"$model.*">>, [{field_alias, 2, {<<"model">>, '*'}}]},
+         {<<"$field">>, [{field_alias, 2, none, <<"field">>}]},
+         {<<"$model.field">>, [{field_alias, 2, none, {<<"model">>, <<"field">>}}]},
+         {<<"$*">>, [{field_alias, 2, none, '*'}]},
+         {<<"$model.*">>, [{field_alias, 2, none, {<<"model">>, '*'}}]},
 
-         {<<"$#field">>, [{field_full_alias, 3, <<"field">>}]},
-         {<<"$#model.field">>, [{field_full_alias, 3, {<<"model">>, <<"field">>}}]},
-         {<<"$#*">>, [{field_full_alias, 3, '*'}]},
-         {<<"$#model.*">>, [{field_full_alias, 3, {<<"model">>, '*'}}]},
+         {<<"$#field">>, [{field_alias, 3, table, <<"field">>}]},
+         {<<"$#model.field">>, [{field_alias, 3, table, {<<"model">>, <<"field">>}}]},
+         {<<"$#*">>, [{field_alias, 3, table, '*'}]},
+         {<<"$#model.*">>, [{field_alias, 3, table, {<<"model">>, '*'}}]},
 
-         {<<"@*">>, [{field_query_alias, 2, '*'}]},
-         {<<"@...">>, [{field_query_alias, 2, '...'}]},
-         {<<"@field">>, [{field_query_alias, 2, <<"field">>}]},
-         {<<"@model.field">>, [{field_query_alias, 2, {<<"model">>, <<"field">>}}]},
-         {<<"@model.*">>, [{field_query_alias, 2, {<<"model">>, '*'}}]},
-         {<<"@model...">>, [{field_query_alias, 2, {<<"model">>, '...'}}]},
-         {<<"@field(123)">>, [{field_query, 2, <<"field">>}, {string, 8, <<"123">>}]},
-         {<<"@model.field(123)">>, [{field_query, 2, {<<"model">>, <<"field">>}},
+         {<<"@*">>, [{field_query_alias, 2, none, '*'}]},
+         {<<"@...">>, [{field_query_alias, 2, none, '...'}]},
+         {<<"@field">>, [{field_query_alias, 2, none, <<"field">>}]},
+         {<<"@model.field">>, [{field_query_alias, 2, none, {<<"model">>, <<"field">>}}]},
+         {<<"@model.*">>, [{field_query_alias, 2, none, {<<"model">>, '*'}}]},
+         {<<"@model...">>, [{field_query_alias, 2, none, {<<"model">>, '...'}}]},
+         {<<"@field(123)">>, [{field_query, 2, none, <<"field">>}, {string, 8, <<"123">>}]},
+         {<<"@model.field(123)">>, [{field_query, 2, none, {<<"model">>, <<"field">>}},
                                     {string, 14, <<"123">>}]},
 
-         {<<"@#*">>, [{field_query_full_alias, 3, '*'}]},
-         {<<"@#...">>, [{field_query_full_alias, 3, '...'}]},
-         {<<"@#field">>, [{field_query_full_alias, 3, <<"field">>}]},
-         {<<"@#model.field">>, [{field_query_full_alias, 3, {<<"model">>, <<"field">>}}]},
-         {<<"@#model.*">>, [{field_query_full_alias, 3, {<<"model">>, '*'}}]},
-         {<<"@#model...">>, [{field_query_full_alias, 3, {<<"model">>, '...'}}]},
+         {<<"@#*">>, [{field_query_alias, 3, table, '*'}]},
+         {<<"@#...">>, [{field_query_alias, 3, table, '...'}]},
+         {<<"@#field">>, [{field_query_alias, 3, table, <<"field">>}]},
+         {<<"@#model.field">>, [{field_query_alias, 3, table, {<<"model">>, <<"field">>}}]},
+         {<<"@#model.*">>, [{field_query_alias, 3, table, {<<"model">>, '*'}}]},
+         {<<"@#model...">>, [{field_query_alias, 3, table, {<<"model">>, '...'}}]},
 
          {<<"~field">>, [{field_type, 2, <<"field">>}]},
          {<<"~model.field">>, [{field_type, 2, {<<"model">>, <<"field">>}}]},
@@ -393,20 +393,20 @@ parsers_test_() ->
 table_link_test_() ->
     Tests =
         [
-         {<<"${tab}field">>, [{table_link, 3, <<"tab">>, {field_alias, 7, <<"field">>}}]},
-         {<<"${tab}model.field">>, [{table_link, 3, <<"tab">>, {field_alias, 7, {<<"model">>, <<"field">>}}}]},
-         {<<"${tab}*">>, [{table_link, 3, <<"tab">>, {field_alias, 7, '*'}}]},
-         {<<"${tab}model.*">>, [{table_link, 3, <<"tab">>, {field_alias, 7, {<<"model">>, '*'}}}]},
+         {<<"${tab}field">>, [{field_alias, 7, {3, <<"tab">>}, <<"field">>}]},
+         {<<"${tab}model.field">>, [{field_alias, 7, {3, <<"tab">>}, {<<"model">>, <<"field">>}}]},
+         {<<"${tab}*">>, [{field_alias, 7, {3, <<"tab">>}, '*'}]},
+         {<<"${tab}model.*">>, [{field_alias, 7, {3, <<"tab">>}, {<<"model">>, '*'}}]},
 
-         {<<"@{tab}*">>, [{table_link, 3, <<"tab">>, {field_query_alias, 7, '*'}}]},
-         {<<"@{tab}...">>, [{table_link, 3, <<"tab">>, {field_query_alias, 7, '...'}}]},
-         {<<"@{tab}field">>, [{table_link, 3, <<"tab">>, {field_query_alias, 7, <<"field">>}}]},
-         {<<"@{tab}model.field">>, [{table_link, 3, <<"tab">>, {field_query_alias, 7, {<<"model">>, <<"field">>}}}]},
-         {<<"@{tab}model.*">>, [{table_link, 3, <<"tab">>, {field_query_alias, 7, {<<"model">>, '*'}}}]},
-         {<<"@{tab}model...">>, [{table_link, 3, <<"tab">>, {field_query_alias, 7, {<<"model">>, '...'}}}]},
-         {<<"@{tab}field(123)">>, [{table_link, 3, <<"tab">>, {field_query, 7, <<"field">>}},
+         {<<"@{tab}*">>, [{field_query_alias, 7, {3, <<"tab">>}, '*'}]},
+         {<<"@{tab}...">>, [{field_query_alias, 7, {3, <<"tab">>}, '...'}]},
+         {<<"@{tab}field">>, [{field_query_alias, 7, {3, <<"tab">>}, <<"field">>}]},
+         {<<"@{tab}model.field">>, [{field_query_alias, 7, {3, <<"tab">>}, {<<"model">>, <<"field">>}}]},
+         {<<"@{tab}model.*">>, [{field_query_alias, 7, {3, <<"tab">>}, {<<"model">>, '*'}}]},
+         {<<"@{tab}model...">>, [{field_query_alias, 7, {3, <<"tab">>}, {<<"model">>, '...'}}]},
+         {<<"@{tab}field(123)">>, [{field_query, 7, {3, <<"tab">>}, <<"field">>},
                                    {string, 13, <<"123">>}]},
-         {<<"@{tab}model.field(123)">>, [{table_link, 3, <<"tab">>, {field_query, 7, {<<"model">>, <<"field">>}}},
+         {<<"@{tab}model.field(123)">>, [{field_query, 7, {3, <<"tab">>}, {<<"model">>, <<"field">>}},
                                          {string, 19, <<"123">>}]}
         ],
     F = fun(D, R) ->
@@ -419,16 +419,16 @@ table_link_test_() ->
 qf_inner_test_() ->
     Tests =
         [
-         {<<"@field($field2)">>, [{field_query, 2, <<"field">>},
-                                  {field_alias, 9, <<"field2">>}]},
-         {<<"@field(#model)">>, [{field_query, 2, <<"field">>},
+         {<<"@field($field2)">>, [{field_query, 2, none, <<"field">>},
+                                  {field_alias, 9, none, <<"field2">>}]},
+         {<<"@field(#model)">>, [{field_query, 2, none, <<"field">>},
                                  {table, 9, <<"model">>}]},
-         {<<"@field(~field2)">>, [{field_query, 2, <<"field">>},
+         {<<"@field(~field2)">>, [{field_query, 2, none, <<"field">>},
                                   {field_type, 9, <<"field2">>}]},
-         {<<"@field(~[string])">>, [{field_query, 2, <<"field">>},
+         {<<"@field(~[string])">>, [{field_query, 2, none, <<"field">>},
                                     {type, 10, <<"string">>}]},
-         {<<"@field($field2*~[string])">>, [{field_query, 2, <<"field">>},
-                                            {field_alias, 9, <<"field2">>},
+         {<<"@field($field2*~[string])">>, [{field_query, 2, none, <<"field">>},
+                                            {field_alias, 9, none, <<"field2">>},
                                             {string, 15, <<"*">>},
                                             {type, 18, <<"string">>}]}
         ],
@@ -483,6 +483,9 @@ h({string, Pos, Bin}) ->
     [{Pos, byte_size(Bin), Bin}];
 h({table_link, Pos, Bin, Node}) ->
     [{Pos, byte_size(Bin), Bin}, h(Node)];
+h({_, Pos, _, MF}) ->
+    Bin = mf(MF),
+    [{Pos, byte_size(Bin), Bin}];
 h({_, Pos, MF}) ->
     Bin = mf(MF),
     [{Pos, byte_size(Bin), Bin}].
