@@ -301,11 +301,16 @@ parse_fq_(<<"...", Rest/binary>>, Link, State, Next) ->
     Next({field_query_alias, State#state.pos+1, Link, '...'}, Rest, ?INC_POS(State, 3));
 parse_fq_(Bin, Link, State, Next) ->
     GoNext =
-        fun(FQ, <<$(, R/binary>>, S) ->
-                S2 = S#state{pos=S#state.pos+1, braces_cnt=1, brace_mode=true},
-                Next(erlang:insert_element(1, FQ, field_query), R, S2);
-           (FQ, R, S) ->
-                Next(erlang:insert_element(1, FQ, field_query_alias), R, S)
+        fun(P, F, <<$(, R/binary>>, S) ->
+                case Link of
+                    none ->
+                        S2 = S#state{pos=S#state.pos+1, braces_cnt=1, brace_mode=true},
+                        Next({field_query, P, F}, R, S2);
+                    _ ->
+                        {error, {wrong_format, {S#state.pos+1, <<"Manual data query not allowed for linked query field">>}}}
+                end;
+           (P, F, R, S) ->
+                Next({field_query_alias, P, Link, F}, R, S)
         end,
     token(Bin, State,
           fun(<<>>, _Rest, State2) ->
@@ -321,11 +326,11 @@ parse_fq_(Bin, Link, State, Next) ->
                                 fun(<<>>, _Rest2, State3) ->
                                         {error, {wrong_format, {State3#state.pos+2, "Field name required"}}};
                                    (Field, Rest2, State3) ->
-                                        GoNext({State#state.pos+1, Link, {Model, Field}}, Rest2, ?INC_POS(State3,1))
+                                        GoNext(State#state.pos+1, {Model, Field}, Rest2, ?INC_POS(State3,1))
                                 end)
                   end;
              (Field, Rest, State2) ->
-                  GoNext({State#state.pos+1, Link, Field}, Rest, State2)
+                  GoNext(State#state.pos+1, Field, Rest, State2)
           end).
 
 %% =============================================================================
@@ -367,8 +372,8 @@ parsers_test_() ->
          {<<"@model.field">>, [{field_query_alias, 2, none, {<<"model">>, <<"field">>}}]},
          {<<"@model.*">>, [{field_query_alias, 2, none, {<<"model">>, '*'}}]},
          {<<"@model...">>, [{field_query_alias, 2, none, {<<"model">>, '...'}}]},
-         {<<"@field(123)">>, [{field_query, 2, none, <<"field">>}, {string, 8, <<"123">>}]},
-         {<<"@model.field(123)">>, [{field_query, 2, none, {<<"model">>, <<"field">>}},
+         {<<"@field(123)">>, [{field_query, 2, <<"field">>}, {string, 8, <<"123">>}]},
+         {<<"@model.field(123)">>, [{field_query, 2, {<<"model">>, <<"field">>}},
                                     {string, 14, <<"123">>}]},
 
          {<<"@#*">>, [{field_query_alias, 3, table, '*'}]},
@@ -403,11 +408,7 @@ table_link_test_() ->
          {<<"@{tab}field">>, [{field_query_alias, 7, {3, <<"tab">>}, <<"field">>}]},
          {<<"@{tab}model.field">>, [{field_query_alias, 7, {3, <<"tab">>}, {<<"model">>, <<"field">>}}]},
          {<<"@{tab}model.*">>, [{field_query_alias, 7, {3, <<"tab">>}, {<<"model">>, '*'}}]},
-         {<<"@{tab}model...">>, [{field_query_alias, 7, {3, <<"tab">>}, {<<"model">>, '...'}}]},
-         {<<"@{tab}field(123)">>, [{field_query, 7, {3, <<"tab">>}, <<"field">>},
-                                   {string, 13, <<"123">>}]},
-         {<<"@{tab}model.field(123)">>, [{field_query, 7, {3, <<"tab">>}, {<<"model">>, <<"field">>}},
-                                         {string, 19, <<"123">>}]}
+         {<<"@{tab}model...">>, [{field_query_alias, 7, {3, <<"tab">>}, {<<"model">>, '...'}}]}
         ],
     F = fun(D, R) ->
                 {ok, Parsed} = simple_parse(D),
@@ -419,15 +420,15 @@ table_link_test_() ->
 qf_inner_test_() ->
     Tests =
         [
-         {<<"@field($field2)">>, [{field_query, 2, none, <<"field">>},
+         {<<"@field($field2)">>, [{field_query, 2, <<"field">>},
                                   {field_alias, 9, none, <<"field2">>}]},
-         {<<"@field(#model)">>, [{field_query, 2, none, <<"field">>},
+         {<<"@field(#model)">>, [{field_query, 2, <<"field">>},
                                  {table, 9, <<"model">>}]},
-         {<<"@field(~field2)">>, [{field_query, 2, none, <<"field">>},
+         {<<"@field(~field2)">>, [{field_query, 2, <<"field">>},
                                   {field_type, 9, <<"field2">>}]},
-         {<<"@field(~[string])">>, [{field_query, 2, none, <<"field">>},
+         {<<"@field(~[string])">>, [{field_query, 2, <<"field">>},
                                     {type, 10, <<"string">>}]},
-         {<<"@field($field2*~[string])">>, [{field_query, 2, none, <<"field">>},
+         {<<"@field($field2*~[string])">>, [{field_query, 2, <<"field">>},
                                             {field_alias, 9, none, <<"field2">>},
                                             {string, 15, <<"*">>},
                                             {type, 18, <<"string">>}]}
@@ -454,12 +455,15 @@ errors_test_() ->
          {<<"#*">>, 2},
          {<<"#{tab}">>, 2},
          {<<"@{tab}">>, 7},
+         {<<"@{tab}model.field(test)">>, 18},
          {<<"@#{tab}">>, 3},
+         {<<"@#model.field(test)">>, 14},
          {<<"${tab}">>, 7},
          {<<"$#{tab}">>, 3},
-         {<<"@{tab}f(~f2">>, 12},
-         {<<"@{tab}f(~f2*(12+12)">>, 20},
-         {<<"@{tab}f(@f2)">>, 9},
+         {<<"@{tab}f(~f2">>, 8},
+         {<<"@f(~f2">>, 7},
+         {<<"@f(~f2*(12+12)">>, 15},
+         {<<"@f(@f2)">>, 4},
          {<<"~[">>, 3},
          {<<"~{">>, 2},
          {<<"~{tab}">>, 2},
@@ -499,7 +503,7 @@ pos_big_test_() ->
     Data =
         <<"SELECT "
           "@f1, @f2, @m.f3, @{a}f4, @{a}m.f5, @f6(d1), @m.f7(d2), @..., @{t}*"
-          "@{t}m.f8($f8 * (1 + $f9)), @f10(\\$f10), \\$f11, ${t}m.f12, "
+          "@m.f8($f8 * (1 + $f9)), @f10(\\$f10), \\$f11, ${t}m.f12, "
           "'@m', \"@m.f12\"",
           "FROM #m AS t WHERE $f9 = ~[number]">>,
     {ok, Result} = simple_parse(Data),
